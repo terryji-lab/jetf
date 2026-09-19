@@ -1,0 +1,37 @@
+# Python virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Large mass spectrometry data & index snapshots
+*.mgf
+*.npz
+*.h5
+*.hdf5
+*.parquet
+*.arrow
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

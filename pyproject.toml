@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jetf"
+version = "0.1.0"
+description = "JET-Forest: 前体自适应浅层包络森林与 BVH-SAH 紧致索引质谱检索"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.23",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "hypothesis>=6.90",
+]
+
+[project.scripts]
+jetf = "jetf.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jetf"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
