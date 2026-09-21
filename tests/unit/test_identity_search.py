@@ -284,6 +284,32 @@ def test_zero_energy_supplement_with_precursor_window(synth_library_and_forest):
         h_prec = library.spectra[h.spectrum_index].precursor_mz
         assert window.contains(h_prec)
 
+    # 验证 supplement_zero_score 兼容支持 set[int]、NDArray[bool] 与通用 Container[int]
+    from jetf.results import ResultSet, ZeroScoreCandidates, supplement_zero_score
+    candidates = ZeroScoreCandidates(
+        member=forest.zero_energy_members.member,
+        ion_mode=forest.zero_energy_members.ion_mode,
+        precursor_mz=forest.zero_energy_members.precursor_mz,
+    )
+    rs_set = ResultSet(config)
+    scored_set: set[int] = {38}
+    added_set = supplement_zero_score(rs_set, library, config, candidates, scored_set)
+
+    rs_arr = ResultSet(config)
+    scored_arr = np.zeros(library.n_spectra, dtype=np.bool_)
+    scored_arr[38] = True
+    added_arr = supplement_zero_score(rs_arr, library, config, candidates, scored_arr)
+
+    class CustomContainer:
+        def __contains__(self, item: object) -> bool:
+            return item == 38
+
+    rs_cont = ResultSet(config)
+    added_cont = supplement_zero_score(rs_cont, library, config, candidates, CustomContainer())
+
+    assert added_set == added_arr == added_cont
+    assert rs_set.finish() == rs_arr.finish() == rs_cont.finish()
+
 
 def test_precursor_window_disjoint_returns_empty(synth_library_and_forest):
     """测试窗口无任何库谱落在其中时，检索正常返回 0 命中，且根节点完全不展开。"""

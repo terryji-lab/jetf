@@ -1,0 +1,979 @@
+{
+  "report_title": "JET-Forest vs matchms Benchmark Report",
+  "metadata": {
+    "timestamp": "2026-09-21T15:30:57.275111+00:00",
+    "python_version": "3.10.6",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "machine": "AMD64",
+    "dependencies": {
+      "jetf": "0.1.0",
+      "matchms": "0.33.1",
+      "numpy": "2.2.6",
+      "numba": "0.67.0",
+      "scipy": "1.15.3",
+      "pandas": "2.3.3",
+      "tabulate": "0.10.0"
+    },
+    "config": {
+      "mode": "consistency",
+      "library_size": 2000,
+      "n_queries": 30,
+      "n_pairs": 1000,
+      "tolerance": 0.02,
+      "tolerance_da": 0.02,
+      "seed": 2026,
+      "mgf": "D:\\JETF\\GNPS-LIBRARY.mgf",
+      "clean": true,
+      "clean_max_peaks": 300,
+      "clean_min_rel": 0.001
+    }
+  },
+  "results": {
+    "pairwise_consistency": {
+      "n_pairs": 1000,
+      "tolerance_da": 0.02,
+      "max_absolute_error": 0.00010319971470382217,
+      "mean_absolute_error": 1.031997147140729e-07,
+      "rmse": 3.2634615234364706e-06,
+      "matched_peak_match_rate": 0.999,
+      "p50_error": 0.0,
+      "p95_error": 6.938893903907228e-18,
+      "p99_error": 2.220446049250313e-16,
+      "discrepant_pairs_count": 1
+    },
+    "retrieval_consistency": [
+      {
+        "n_queries": 30,
+        "mode_name": "开放检索 Top-10 (排除自身)",
+        "mean_recall_at_k": 1.0,
+        "all_zero_false_dismissals": true,
+        "total_false_dismissals": 0,
+        "max_score_discrepancy": 0.0006439596159200089,
+        "details": [
+          {
+            "query_index": 1211,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1648,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.163336342344337e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 567,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1454,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.0816681711721685e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1797,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 53,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1707,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1033,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.220446049250313e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1926,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1435,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 354,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.7755575615628914e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 927,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.7755575615628914e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1680,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1273,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.6653345369377348e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1507,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 332,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 736,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 355,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 706,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.440892098500626e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1302,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 7.771561172376096e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 725,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 236,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 158,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.7755575615628914e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1267,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0006439596159200089,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1278,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1569,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1400,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 196,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.163336342344337e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1835,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 597,
+            "mode_name": "开放检索 Top-10 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          }
+        ]
+      },
+      {
+        "n_queries": 30,
+        "mode_name": "开放检索 Top-5 (排除自身)",
+        "mean_recall_at_k": 1.0,
+        "all_zero_false_dismissals": true,
+        "total_false_dismissals": 0,
+        "max_score_discrepancy": 0.0006439596159200089,
+        "details": [
+          {
+            "query_index": 1211,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1648,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.163336342344337e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 567,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1454,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.0816681711721685e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1797,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 53,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1707,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.220446049250313e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1033,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.220446049250313e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1926,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1435,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 354,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.7755575615628914e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 927,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.7755575615628914e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1680,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1273,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.6653345369377348e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1507,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 332,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 736,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 355,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 706,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.440892098500626e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1302,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 725,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 236,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 158,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.7755575615628914e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1267,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0006439596159200089,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1278,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1569,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1400,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 196,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.163336342344337e-17,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1835,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 597,
+            "mode_name": "开放检索 Top-5 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.3877787807814457e-17,
+            "rank_consistent": true
+          }
+        ]
+      },
+      {
+        "n_queries": 30,
+        "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+        "mean_recall_at_k": 1.0,
+        "all_zero_false_dismissals": true,
+        "total_false_dismissals": 0,
+        "max_score_discrepancy": 5.329070518200751e-15,
+        "details": [
+          {
+            "query_index": 1211,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 1,
+            "matchms_hit_count": 1,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1648,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 567,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 1,
+            "matchms_hit_count": 1,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1454,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 1,
+            "matchms_hit_count": 1,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1797,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 2,
+            "matchms_hit_count": 2,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 53,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1707,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 14,
+            "matchms_hit_count": 14,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1033,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 3,
+            "matchms_hit_count": 3,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 2.220446049250313e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1926,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 4,
+            "matchms_hit_count": 4,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1435,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 354,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 927,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 3,
+            "matchms_hit_count": 3,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 1.1102230246251565e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1680,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 2,
+            "matchms_hit_count": 2,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1273,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1507,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 1,
+            "matchms_hit_count": 1,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 332,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 736,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 355,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 706,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 1,
+            "matchms_hit_count": 1,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 4.440892098500626e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1302,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 20,
+            "matchms_hit_count": 20,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 7.771561172376096e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 725,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 5,
+            "matchms_hit_count": 5,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 236,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 158,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1267,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 1,
+            "matchms_hit_count": 1,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.329070518200751e-15,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1278,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 3,
+            "matchms_hit_count": 3,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 3.3306690738754696e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1569,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1400,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 196,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 1835,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 10,
+            "matchms_hit_count": 10,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 5.551115123125783e-16,
+            "rank_consistent": true
+          },
+          {
+            "query_index": 597,
+            "mode_name": "开放检索 Threshold >= 0.50 (排除自身)",
+            "jetf_hit_count": 0,
+            "matchms_hit_count": 0,
+            "recall_at_k": 1.0,
+            "zero_false_dismissals": true,
+            "max_score_diff": 0.0,
+            "rank_consistent": true
+          }
+        ]
+      }
+    ],
+    "retrieval_throughput": []
+  }
+}

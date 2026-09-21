@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-87%20passed%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-90%20passed%20(100%25)-brightgreen.svg)]()
 
 **JET-Forest**（JETF）是一个独立、高吞吐、零漏检（Zero False Dismissals）的串联质谱（MS/MS）相似度检索引擎。它实现了**前体自适应浅层包络森林与 BVH-SAH 紧致索引**（Precursor-Binned Envelope Forest with SAH Leaf Partitioning）算法体系。
 
@@ -43,6 +43,11 @@
 5. **标准化 matchms 谱图清洗流水线与多方言支持 (Data Cleaning & Dialect Support)**：
    - 深度集成行业标准 `matchms` 清洗流程，支持元数据标准化、相对强度去噪（如 $\ge 0.1\%$）、高强 Top-N 峰截断（默认 300 峰）及无效谱剔除，削减 50%~70% 的低信噪比长尾峰，大幅压缩内存开销并提升包络稀疏度与剪枝率。
    - 原生兼容 MGF 多方言前体质量（`PEPMASS`、`PRECURSOR_MZ`、`PRECURSORMZ`、`PARENT_MASS`）及外部标识符（`SPECTRUM_ID`、`TITLE` 等），无缝直读各类开源与仪器导出的超大规模真实质谱库。
+   - 提供完备的坏谱隔离审计机制（`RejectedRecord` 与 `RejectReason`），清晰记录因空峰、非正强度、NaN 异常或清洗过滤而被隔离的谱图。
+
+6. **无锁并发与多核硬件加速 (Lock-Free Concurrency & Multi-Core JIT)**：
+   - **查询级多线程无锁并发**：`ForestIndex` 与 `PreprocessedLibrary` 均为只读不可变的紧凑列式结构化 NumPy 数组。`search_forest` 在遍历检索时为每个线程独立维护私有的 `ResultSet` 优先队列与局部状态栈，**零全局可变状态、零写锁争用（Lock-Free）**，天然安全支持 Python `ThreadPoolExecutor` 并发检索多个查询谱。
+   - **内核级释放 GIL 与数据并行**：底层 Numba JIT 算子内核（叶上界计算、单谱精确上界 $U_{ind}$、贪心余弦精评）均显式声明 `nogil=True`，在密集数值计算期间主动释放 Python 全局解释器锁，使多线程可真实跑满 CPU 多物理核；批量树根求值内核 `_batch_root_bounds_numba` 还支持 `parallel=True`（OpenMP 树间数据并行）。
 
 ---
 
@@ -123,6 +128,28 @@ target_config = QueryConfig(
 )
 target_outcome = search_forest(query_peaks, loaded_forest, library=None, config=target_config)
 print(f"前体靶向命中数: {len(target_outcome.hits)}")
+
+# 6. 多线程无锁并发批量检索 (Official Batch Search API)
+# 官方提供 search_forest_batch，自动执行自适应 JIT 线程解耦，消除过度订阅，安全无锁并发
+from jetf import search_forest_batch
+
+queries = [library.peaks.spectrum_at(i) for i in range(10)]
+batch_results = search_forest_batch(
+    queries, loaded_forest, library=None, config=config, concurrency=4
+)
+print(f"多线程并发检索完成: {len(batch_results)} 条查询")
+
+# 7. 进阶过滤策略 (离子模式策略、最小匹配峰数、自身排除)
+from jetf import IonModePolicy
+
+advanced_config = QueryConfig(
+    mode=SearchMode.TOP_K,
+    k=10,
+    ion_mode=library.spectra[0].ion_mode,
+    ion_mode_policy=IonModePolicy.INCLUDE_UNKNOWN,  # 允许与库中 UNKNOWN 离子模式谱匹配 (默认)
+    min_matched_peaks=3,                           # 至少匹配 3 个碎片峰，过滤偶发孤峰假阳性
+    exclude_spectrum_id="CCMSLIB00000001",         # 留一法/泛化评测时排除自身谱图
+)
 ```
 
 ### 2. 命令行工具 (CLI)
@@ -131,11 +158,17 @@ print(f"前体靶向命中数: {len(target_outcome.hits)}")
 # 从 MGF 文件编译构建索引快照 (指定 --clean 可启用 matchms 标准化去噪与峰数截断)
 jetf build path/to/library.mgf -o library_forest.npz --clean --clean-max-peaks 300 -f
 
+# 编译大库时可选开启被隔离谱图详细记录审计 (--keep-rejected)
+jetf build path/to/library.mgf -o library_forest.npz --clean --keep-rejected -f
+
 # 查看快照元数据与统计信息
 jetf info library_forest.npz
 
-# 运行与 matchms 的全景性能与一致性对比基准 (同时导出 Markdown 与结构化 JSON)
-jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.md -j docs/benchmark-matchms.json
+# 运行与 matchms 的全景性能与一致性对比基准 (同时导出结构化 JSON 与 CSV)
+jetf benchmark --mode all --library-size 2000 --clean -j docs/benchmark-matchms.json -c docs/benchmark-matchms.csv
+
+# 运行 200 万大库脱机多线程高并发吞吐量压测 (指定 --concurrency 4 启用 4 线程并发检索)
+jetf benchmark --snapshot all_gnps_forest.npz --mode throughput --concurrency 4 --skip-matchms -j docs/benchmark-2m.json -c docs/benchmark-2m.csv
 ```
 
 ---
@@ -146,8 +179,8 @@ jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.
 
 ### 1. 结果一致性 (Result Consistency)
 
-- **单对打分等价性**：在 $1,000$ 对真实质谱匹配中，JET-Forest 与 matchms 平均绝对误差 $\text{MAE} = 5.93 \times 10^{-7}$，中位数分差 $0.00$，$95\%$ 谱对分差 $\le 6.94 \times 10^{-18}$，$99\%$ 谱对分差 $\le 2.23 \times 10^{-16}$，匹配峰数吻合率达 **99.80%**。存在 3 对谱（0.3%）出现微小差异（$\text{Max AE} = 3.54 \times 10^{-4}$），源于并列峰贪心匹配时的 tie-breaking 顺序差异。
-- **全库检索零漏检**：在排除自配对的严格近邻检索场景下（开放 Top-K 与阈值检索，共 90 组查询），**Recall@K 恒为 100.00%**，漏检总数为 **0**（**Zero False Dismissals** 严格成立），最大打分差 $\le 8.88 \times 10^{-16}$。
+- **单对打分等价性**：在 $1,000$ 对真实质谱匹配中，JET-Forest 与 matchms 平均绝对误差 $\text{MAE} = 1.03 \times 10^{-7}$，中位数分差 $0.00$，$95\%$ 谱对分差 $\le 6.94 \times 10^{-18}$，$99\%$ 谱对分差 $\le 2.22 \times 10^{-16}$，匹配峰数吻合率达 **99.90%**。存在 1 对谱（0.1%）出现微小差异（$\text{Max AE} = 1.03 \times 10^{-4}$），源于并列峰贪心匹配时的 tie-breaking 顺序差异。
+- **全库检索零漏检**：在排除自配对的严格近邻检索场景下（开放 Top-K 与阈值检索，共 90 组查询），**Recall@K 恒为 100.00%**，漏检总数为 **0**（**Zero False Dismissals** 严格成立）。
 
 ### 2. 吞吐量与加速比 (Throughput & Latency)
 
@@ -163,17 +196,17 @@ jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.
 
 | 检索场景 | 库容量 ($N$) | JETF 单核 QPS | JETF 时延 (Mean±Std [Med] ms) | P95 时延 (ms) | 包络剪枝率 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **开放检索 Top-10 (全库无限制)** | 2,003,310 | **7.8** | 128.72±103.43 [**96.58**] ms | 350.81 ms | **99.98%** |
-| **开放检索 Top-5 (全库无限制)** | 2,003,310 | **9.3** | 107.36±81.46 [**87.18**] ms | 217.20 ms | **99.98%** |
-| **开放检索 Threshold >= 0.50** | 2,003,310 | **1.7** | 591.01±642.97 [**347.24**] ms | 2023.08 ms | **99.74%** |
+| **开放检索 Top-10 (全库无限制)** | 2,003,310 | **7.7** | 129.30±108.44 [**92.93**] ms | 348.74 ms | **99.98%** |
+| **开放检索 Top-5 (全库无限制)** | 2,003,310 | **9.9** | 101.21±78.14 [**81.20**] ms | 222.81 ms | **99.98%** |
+| **开放检索 Threshold >= 0.50** | 2,003,310 | **1.8** | 560.03±610.50 [**355.65**] ms | 1878.01 ms | **99.74%** |
 
-> **基准复现与报告生成**：可通过 CLI 评测套件随时重跑并导出最新 Markdown 与 JSON 报告：
+> **基准复现与报告生成**：可通过 CLI 评测套件随时重跑并导出最新结构化 JSON 与 CSV 结果：
 > ```bash
-> # 运行 200 万全库检索基准测试并生成最新报告
-> jetf benchmark --snapshot all_gnps_forest.npz -o docs/benchmark-2m.md -j docs/benchmark-2m.json --skip-matchms
+> # 运行 200 万全库检索基准测试并生成最新结果
+> jetf benchmark --snapshot all_gnps_forest.npz -j docs/benchmark-2m.json -c docs/benchmark-2m.csv --skip-matchms
 >
 > # 运行与 matchms 严格一致性及对齐评测
-> jetf benchmark GNPS-LIBRARY.mgf --mode all --clean -o docs/benchmark-matchms.md -j docs/benchmark-matchms.json
+> jetf benchmark GNPS-LIBRARY.mgf --mode all --clean -j docs/benchmark-matchms.json -c docs/benchmark-matchms.csv
 > ```
 
 ---
@@ -186,11 +219,12 @@ jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.
 uv run pytest tests/
 ```
 
-- **全量测试 100% 通过 (87/87 passed)**：
+- **全量测试 100% 通过 (90/90 passed)**：
+  - `tests/unit/test_adaptive_concurrency.py`：自适应多线程并发解耦校验（`adaptive_numba_threads` 动态调整与严格现场恢复、`search_forest_batch` 批量并发与串行逐项逐位完全一致性）。
   - `tests/unit/test_accelerated_search.py`：二次加速计划深度校验（JIT 叶上界单调二分与 AABB 剪枝数值等价性、树根零上界短路、Top-K 动态门槛 $\theta$ 预植入安全保真性、多线程并发检索结果逐项吻合）。
   - `tests/unit/test_review_p0_p1_fixes.py`：量化偏置极限距离边缘用例零漏检验证（$m_{lib}=100.0-10^{-13}, m_q=99.98-10^{-13}$）、全 0 强度谱建库列等长校验与微块对齐、阈值检索临界分一致性 $[threshold - 10^{-12}, threshold - 10^{-13}]$ 及 0 峰空谱快速短路。
   - `tests/unit/test_review_fixes_20260920.py`：包络上界浮点上偏（A1）、0.02 Da 网格单元边界浮点截断安全（A2）、幂变换边界防御（A3）、MGF 严格定界符与 UTF-8 BOM 处理（D1, D3）、电荷 0 与多电荷解析（D4）、快照谱元数据往返与独立脱机检索（D2）、子抽样去重与 rejected 审计保留（D5）、一致性评测剔除自身与空 GT 召回修正（E1-E4）。
-  - `tests/unit/test_benchmark_json.py`：系统软硬件元数据采集、结构化 JSON 报告序列化与 CLI `--output-json` 参数集成自测。
+  - `tests/unit/test_benchmark_json.py`：系统软硬件元数据采集、结构化 JSON/CSV 评测结果导出、CLI 参数集成及 Markdown 报告彻底移除验证。
   - `tests/unit/test_cleaning.py`：matchms 标准化谱图清洗流水线、参数边界校验、Top-N 峰截断及紧凑列式拓扑不变量自检。
   - `tests/unit/test_matchms_scoring.py`：与 matchms `CosineGreedy` 的自匹配、不相交及随机重叠数值等价性（误差 $<10^{-10}$）。
   - `tests/e2e/test_matchms_retrieval.py`：全流程对比 matchms 真实候选，实证 100% 召回与零漏检（Zero False Dismissals）。

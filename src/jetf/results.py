@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass
 import heapq
 import time
@@ -15,7 +15,7 @@ from jetf.preprocessing import PreprocessedLibrary
 from jetf.query import QueryConfig, SearchMode, ion_mode_passes, is_eligible
 from jetf.scoring import SCORER_VERSIONED_ID
 from jetf.structure import ION_MODES_BY_CODE
-from jetf.types import INTERNAL_ID_DTYPE, MASS_DTYPE, check_column
+from jetf.types import INTERNAL_ID_DTYPE, MASS_DTYPE, SpectrumMeta, check_column
 
 
 @dataclass(frozen=True)
@@ -189,7 +189,7 @@ def supplement_zero_score(
     library_or_spectra: PreprocessedLibrary | Sequence[SpectrumMeta],
     config: QueryConfig,
     candidates: ZeroScoreCandidates,
-    scored: NDArray[np.bool_],
+    scored: set[int] | NDArray[np.bool_] | Container[int],
 ) -> int:
     """为满足条件的零能量/零匹配谱补入 0 分命中。"""
     spectra = (
@@ -204,9 +204,10 @@ def supplement_zero_score(
         prec_mask = (candidates.precursor_mz >= w_min) & (candidates.precursor_mz <= w_max)
         mask = mask & prec_mask
     added = 0
+    is_mask_arr = isinstance(scored, np.ndarray)
     for raw in candidates.member[mask].tolist():
         row = int(raw)
-        if scored[row]:
+        if scored[row] if is_mask_arr else (row in scored):
             continue
         meta = spectra[row]
         if not is_eligible(config, meta):

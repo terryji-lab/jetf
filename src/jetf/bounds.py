@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import math
+import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Generator, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
@@ -609,4 +611,32 @@ def batch_node_bounds(
         cell_lower_arr,
         cell_upper_arr,
     )
+
+
+@contextmanager
+def adaptive_numba_threads(concurrency: int = 1) -> Generator[int | None, None, None]:
+    """自适应管理 Numba 内部 JIT 线程数，防止多线程并发时的嵌套过度订阅。
+
+    参数:
+        concurrency: 外部并发执行的查询数。若 <= 1，保持原配置独占全核；
+                     若 > 1，自动将内层 JIT 线程设为 max(1, total_cores // concurrency)。
+    """
+    if not _HAVE_NUMBA or concurrency <= 1:
+        yield None
+        return
+
+    orig_threads = None
+    try:
+        orig_threads = numba.get_num_threads()
+        total_cores = os.cpu_count() or 1
+        target_inner = max(1, total_cores // concurrency)
+        numba.set_num_threads(target_inner)
+        yield target_inner
+    finally:
+        if orig_threads is not None:
+            try:
+                numba.set_num_threads(orig_threads)
+            except Exception:
+                pass
+
 

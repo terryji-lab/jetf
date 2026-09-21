@@ -1,4 +1,4 @@
-"""基准评测报告格式化与输出模块（控制台表格与 Markdown）。"""
+"""基准评测报告格式化与输出模块（控制台表格、JSON 与 CSV）。"""
 
 from __future__ import annotations
 
@@ -115,129 +115,6 @@ def format_retrieval_throughput_table(
             ]
         )
     return tabulate(rows, headers=headers, tablefmt=fmt)
-
-
-def generate_full_markdown_report(
-    pairwise_consistency: PairwiseConsistencyResult | None = None,
-    retrieval_consistency: Sequence[RetrievalConsistencySummary] | None = None,
-    pairwise_throughput: PairwiseThroughputResult | None = None,
-    retrieval_throughput: Sequence[RetrievalThroughputResult] | None = None,
-) -> str:
-    """生成完整精美的 Markdown 评测报告。"""
-    sections: list[str] = [
-        "# JET-Forest 与 matchms 性能与一致性全景对比报告",
-        "",
-        "> 本报告自动生成自 `jetf benchmark` 套件，在确定性环境与真实质谱数据集上系统评测了 JET-Forest 相对 matchms 的评分一致性与吞吐量性能。",
-        "",
-    ]
-
-    # 一致性部分
-    if pairwise_consistency or retrieval_consistency:
-        sections.extend([
-            "## 一、结果一致性对比 (Result Consistency)",
-            "",
-            "### 1.1 单对谱评分等价性 (Pairwise Scoring Equivalence)",
-            "比较 `jetf.scoring.score_greedy_cosine` 与 `matchms.similarity.CosineGreedy` 在相同容差与配置下的微观打分差异：",
-            "",
-        ])
-        if pairwise_consistency:
-            sections.append(format_pairwise_consistency_table(pairwise_consistency, fmt="github"))
-            sections.append("")
-
-        if retrieval_consistency:
-            sections.extend([
-                "### 1.2 全库检索零漏检与召回率 (Retrieval Recall & Zero False Dismissals)",
-                "在不同检索场景下，以 matchms 全量穷举打分为金标准（Ground Truth），检验 JET-Forest 索引剪枝检索的召回率与零漏检特性：",
-                "",
-                format_retrieval_consistency_table(retrieval_consistency, fmt="github"),
-                "",
-            ])
-
-    # 吞吐量部分
-    if pairwise_throughput or retrieval_throughput:
-        sections.extend([
-            "## 二、吞吐量与时延对比 (Throughput & Latency)",
-            "",
-            "### 2.1 逐对谱计算内核微基准 (Pairwise Kernel Microbenchmark)",
-            "",
-        ])
-        if pairwise_throughput:
-            sections.append(format_pairwise_throughput_table(pairwise_throughput, fmt="github"))
-            sections.append("")
-
-        if retrieval_throughput:
-            sections.extend([
-                "### 2.2 端到端 1-to-N 库检索性能 (1-to-N Library Retrieval Macrobenchmark)",
-                "评测真实查询谱在参考库中的检索吞吐量（QPS）、时延分布及包络森林剪枝带来的端到端加速比：",
-                "",
-                format_retrieval_throughput_table(retrieval_throughput, fmt="github"),
-                "",
-            ])
-
-    # 评测结论（根据实际数据动态生成，避免硬编码正面结论与数据脱节）
-    conclusions: list[str] = ["## 三、评测结论与工程洞见", ""]
-
-    # 结论 1: 数值等价性（根据 MAE 和显著差异对数动态生成）
-    if pairwise_consistency is not None:
-        mae = pairwise_consistency.mean_absolute_error
-        max_ae = pairwise_consistency.max_absolute_error
-        n_disc = pairwise_consistency.discrepant_pairs_count
-        if n_disc == 0 and mae < 1e-10:
-            conclusions.append(
-                "1. **数值等价性**：JET-Forest 与 matchms 在全部抽样谱对中表现出严格的数值等价性"
-                f"（MAE = {mae:.2e}，Max AE = {max_ae:.2e}，零显著差异对），"
-                "误差处于双精度浮点噪声范围内。"
-            )
-        elif n_disc > 0:
-            conclusions.append(
-                f"1. **数值一致性**：JET-Forest 与 matchms 平均绝对误差 MAE = {mae:.2e}，"
-                f"其中 {n_disc} 对谱（{n_disc/pairwise_consistency.n_pairs*100:.1f}%）出现显著差异"
-                f"（Max AE = {max_ae:.2e}），可能源于并列峰贪心匹配的 tie-breaking 顺序差异。"
-                f"其余谱对误差处于浮点噪声范围内（P99 = {pairwise_consistency.p99_error:.2e}）。"
-            )
-        else:
-            conclusions.append(
-                f"1. **数值一致性**：MAE = {mae:.2e}，Max AE = {max_ae:.2e}，"
-                f"P99 = {pairwise_consistency.p99_error:.2e}，零显著差异对。"
-            )
-
-    # 结论 2: 零漏检（根据实际召回率数据生成）
-    if retrieval_consistency:
-        all_pass = all(s.all_zero_false_dismissals for s in retrieval_consistency)
-        total_miss = sum(s.total_false_dismissals for s in retrieval_consistency)
-        total_queries = sum(s.n_queries for s in retrieval_consistency)
-        if all_pass and total_miss == 0:
-            conclusions.append(
-                f"2. **零漏检验证**：在 {total_queries} 组查询的全库开放检索中，"
-                "Recall@K 均为 100%，未观察到漏检（Zero False Dismissals）。"
-                "注意：此结论基于有限抽样，不等同于数学证明。"
-            )
-        else:
-            conclusions.append(
-                f"2. **漏检警告**：在 {total_queries} 组查询中观察到 {total_miss} 次漏检，"
-                "需进一步排查包络上界安全性。"
-            )
-
-    # 结论 3: 加速比（根据实际 speedup 数据生成）
-    if retrieval_throughput:
-        speedups = [r.speedup for r in retrieval_throughput if r.speedup > 0 and r.matchms_qps > 0]
-        if speedups:
-            min_sp = min(speedups)
-            max_sp = max(speedups)
-            conclusions.append(
-                f"3. **端到端加速比**：在 {len(speedups)} 个检索场景中，"
-                f"JET-Forest 相对 matchms 的加速比范围为 {min_sp:.1f}x ~ {max_sp:.1f}x。"
-                "加速来源为包络剪枝避免了绝大多数不相关谱的精评计算。"
-                "注意：matchms 侧计时包含 is_eligible 元数据过滤与全量候选排序的 Python 开销，"
-                "与 JETF 单次 search_forest 调用的口径不完全对称。"
-            )
-        else:
-            conclusions.append("3. **加速比**：matchms 基线被跳过或数据不可用，无法计算加速比。")
-
-    sections.extend(conclusions)
-
-    return "\n".join(sections)
-
 
 def get_system_metadata() -> dict[str, Any]:
     """采集当前运行环境元数据（系统、Python与核心依赖版本）。"""
@@ -385,6 +262,7 @@ def save_csv_report(
             "jetf_qps",
             "matchms_qps",
             "speedup",
+            "throughput_speedup",
             "jetf_latency_p50_ms",
             "jetf_latency_mean_ms",
             "jetf_latency_std_ms",
@@ -413,6 +291,12 @@ def save_csv_report(
                 "jetf_qps": round(tp.jetf_qps, 2),
                 "matchms_qps": round(tp.matchms_qps, 2) if tp.matchms_qps > 0 else "N/A",
                 "speedup": f"{tp.speedup:.2f}x" if not np.isnan(tp.speedup) else "N/A",
+                "throughput_speedup": (
+                    f"{tp.throughput_speedup:.2f}x"
+                    if getattr(tp, "throughput_speedup", 0.0) > 0
+                    and not np.isnan(getattr(tp, "throughput_speedup", 0.0))
+                    else "N/A"
+                ),
                 "jetf_latency_p50_ms": round(tp.jetf_latency_p50_ms, 2),
                 "jetf_latency_mean_ms": round(tp.jetf_latency_mean_ms, 2),
                 "jetf_latency_std_ms": round(tp.jetf_latency_std_ms, 2),

@@ -10,7 +10,7 @@ from jetf.builder import build_forest_index
 from jetf.benchmarks.dataset import sample_query_spectra_from_forest
 from jetf.benchmarks.throughput import benchmark_retrieval_throughput
 from jetf.cleaning import MatchmsCleanConfig
-from jetf.cli import main
+from jetf.cli import build_parser, main
 from jetf.preprocessing import preprocess_library
 from jetf.query import QueryConfig, SearchMode
 from jetf.serialization import load_forest_snapshot, save_forest_snapshot
@@ -122,11 +122,7 @@ def test_snapshot_sampling_and_throughput_benchmark():
 
 
 def test_cli_argument_parsing():
-    """验证 CLI build 与 benchmark 参数的默认开启清洗与 snapshot 支持。"""
-    # 验证 CLI help 或参数构建
-    import sys
-    from jetf.cli import main
-
+    """验证 CLI build 与 benchmark 参数的默认开启清洗、snapshot 支持及 MGF 参数解析。"""
     # 捕获 --help 退出码 0
     try:
         main(["build", "--help"])
@@ -137,6 +133,34 @@ def test_cli_argument_parsing():
         main(["benchmark", "--help"])
     except SystemExit as exc:
         assert exc.code == 0
+
+    try:
+        main(["benchmark", "GNPS-LIBRARY.mgf", "--help"])
+    except SystemExit as exc:
+        assert exc.code == 0
+
+    parser = build_parser()
+
+    # 1. 验证 benchmark 命令正常解析位置参数
+    args_pos = parser.parse_args(["benchmark", "GNPS-LIBRARY.mgf"])
+    assert args_pos.mgf == "GNPS-LIBRARY.mgf"
+    assert args_pos.mgf_opt is None
+    mgf_pos = getattr(args_pos, "mgf", None) or getattr(args_pos, "mgf_opt", None)
+    assert mgf_pos == "GNPS-LIBRARY.mgf"
+
+    # 2. 验证 benchmark 命令正常解析选项参数 --mgf
+    args_opt = parser.parse_args(["benchmark", "--mgf", "GNPS-LIBRARY.mgf"])
+    assert args_opt.mgf is None
+    assert args_opt.mgf_opt == "GNPS-LIBRARY.mgf"
+    mgf_opt = getattr(args_opt, "mgf", None) or getattr(args_opt, "mgf_opt", None)
+    assert mgf_opt == "GNPS-LIBRARY.mgf"
+
+    # 3. 验证未提供 MGF 时为 None
+    args_none = parser.parse_args(["benchmark"])
+    assert args_none.mgf is None
+    assert args_none.mgf_opt is None
+    mgf_none = getattr(args_none, "mgf", None) or getattr(args_none, "mgf_opt", None)
+    assert mgf_none is None
 
 
 def test_spectrum_at_bounds_check():

@@ -17,6 +17,7 @@ import numpy as np
 
 from jetf.benchmarks.adapter import check_matchms_available, jetf_peaks_to_matchms
 from jetf.benchmarks.dataset import BenchmarkDataset, load_benchmark_dataset, sample_query_spectra
+from jetf.bounds import adaptive_numba_threads
 from jetf.query import IonModePolicy, QueryConfig, SearchMode, is_eligible
 from jetf.scoring import score_greedy_cosine
 from jetf.search import search_forest
@@ -59,6 +60,7 @@ class RetrievalThroughputResult:
     jetf_latency_std_ms: float = 0.0
     matchms_latency_std_ms: float = 0.0
     concurrency: int = 1
+    throughput_speedup: float = 0.0
 
 
 def benchmark_pairwise_throughput(
@@ -184,28 +186,41 @@ def benchmark_retrieval_throughput(
     scored_counts: list[int] = []
 
     t_wall_start = time.perf_counter()
-    if concurrency <= 1:
-        for _, q, q_cfg in parsed_queries:
-            t0 = time.perf_counter()
-            outcome = search_forest(q, forest, library, q_cfg)
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
-            jetf_times_ms.append(elapsed_ms)
-            scored_counts.append(outcome.stats.n_scored)
-    else:
-        from concurrent.futures import ThreadPoolExecutor
+    with adaptive_numba_threads(concurrency) as target_inner:
+        if concurrency <= 1:
+            for _, q, q_cfg in parsed_queries:
+                t0 = time.perf_counter()
+                outcome = search_forest(q, forest, library, q_cfg)
+                elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                jetf_times_ms.append(elapsed_ms)
+                scored_counts.append(outcome.stats.n_scored)
+        else:
+            from concurrent.futures import ThreadPoolExecutor
 
-        def _eval_single(item: tuple[int, SpectrumPeaks, QueryConfig]) -> tuple[float, int]:
-            _, q, q_cfg = item
-            t0 = time.perf_counter()
-            outcome = search_forest(q, forest, library, q_cfg)
-            elapsed = (time.perf_counter() - t0) * 1000.0
-            return elapsed, outcome.stats.n_scored
+            def _init_worker(inner_threads: int | None) -> None:
+                if inner_threads is not None:
+                    try:
+                        import numba
+                        numba.set_num_threads(inner_threads)
+                    except Exception:
+                        pass
 
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            eval_results = list(executor.map(_eval_single, parsed_queries))
+            def _eval_single(item: tuple[int, SpectrumPeaks, QueryConfig]) -> tuple[float, int]:
+                _, q, q_cfg = item
+                t0 = time.perf_counter()
+                outcome = search_forest(q, forest, library, q_cfg)
+                elapsed = (time.perf_counter() - t0) * 1000.0
+                return elapsed, outcome.stats.n_scored
 
-        jetf_times_ms = [res[0] for res in eval_results]
-        scored_counts = [res[1] for res in eval_results]
+            with ThreadPoolExecutor(
+                max_workers=concurrency,
+                initializer=_init_worker,
+                initargs=(target_inner,),
+            ) as executor:
+                eval_results = list(executor.map(_eval_single, parsed_queries))
+
+            jetf_times_ms = [res[0] for res in eval_results]
+            scored_counts = [res[1] for res in eval_results]
 
     wall_duration_s = time.perf_counter() - t_wall_start
 
@@ -301,6 +316,7 @@ def benchmark_retrieval_throughput(
     # 系统级有效 QPS 统计（考虑多核并发墙上时延）
     jetf_qps = len(parsed_queries) / wall_duration_s if wall_duration_s > 0 else (1000.0 / jetf_mean if jetf_mean > 0 else 0.0)
 
+    throughput_speedup = 0.0
     if not skip_matchms and matchms_times_ms:
         mms_arr = np.array(matchms_times_ms, dtype=np.float64)
         mms_mean = float(np.mean(mms_arr))
@@ -310,6 +326,8 @@ def benchmark_retrieval_throughput(
         mms_p95 = float(np.percentile(mms_arr, 95))
         mms_p99 = float(np.percentile(mms_arr, 99))
         speedup = mms_mean / jetf_mean if jetf_mean > 0 else 1.0
+        if mms_qps > 0:
+            throughput_speedup = jetf_qps / mms_qps
     else:
         mms_mean = 0.0
         mms_std = 0.0
@@ -318,6 +336,7 @@ def benchmark_retrieval_throughput(
         mms_p95 = 0.0
         mms_p99 = 0.0
         speedup = float('nan')  # matchms 被跳过时无加速比
+        throughput_speedup = float('nan')
 
     avg_scored = float(np.mean(scored_counts))
     avg_scored_ratio = avg_scored / lib_size if lib_size > 0 else 1.0
@@ -343,6 +362,7 @@ def benchmark_retrieval_throughput(
         jetf_latency_std_ms=jetf_std,
         matchms_latency_std_ms=mms_std,
         concurrency=concurrency,
+        throughput_speedup=throughput_speedup,
     )
 
 

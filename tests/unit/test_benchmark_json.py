@@ -130,11 +130,29 @@ def test_save_json_report(tmp_path: Path):
     assert data["metadata"]["config"]["seed"] == 42
 
 
-def test_cli_benchmark_json_argument():
-    # Verify benchmark CLI parser has -j / --output-json and -c / --output-csv options without crashing
+def test_cli_benchmark_json_and_csv_argument(capsys):
+    # Verify benchmark CLI parser has -j / --output-json and -c / --output-csv options, and no --output-md
     with pytest.raises(SystemExit) as exc_info:
         main(["benchmark", "--help"])
     assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "--output-json" in captured.out
+    assert "--output-csv" in captured.out
+    assert "--output-md" not in captured.out
+
+    # Passing --output-md should fail as unrecognized argument
+    with pytest.raises(SystemExit) as exc_info:
+        main(["benchmark", "dummy.mgf", "--output-md", "out.md"])
+    assert exc_info.value.code != 0
+
+
+def test_markdown_report_removed():
+    # Verify generate_full_markdown_report is no longer exposed
+    import jetf.benchmarks
+    import jetf.benchmarks.reporter
+
+    assert not hasattr(jetf.benchmarks, "generate_full_markdown_report")
+    assert not hasattr(jetf.benchmarks.reporter, "generate_full_markdown_report")
 
 
 def test_save_csv_report(tmp_path: Path):
@@ -158,6 +176,7 @@ def test_save_csv_report(tmp_path: Path):
             speedup=4.8,
             avg_scored_ratio=0.02,
             avg_pruned_ratio=0.98,
+            throughput_speedup=4.8,
         )
     ]
     target = tmp_path / "report.csv"
@@ -168,4 +187,6 @@ def test_save_csv_report(tmp_path: Path):
     assert "mode_name" in content
     assert "Top-10" in content
     assert "120.0" in content
+    assert "throughput_speedup" in content
+    assert "4.80x" in content
 

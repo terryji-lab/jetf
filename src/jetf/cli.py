@@ -111,7 +111,6 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         format_pairwise_throughput_table,
         format_retrieval_consistency_table,
         format_retrieval_throughput_table,
-        generate_full_markdown_report,
         save_json_report,
         save_csv_report,
     )
@@ -236,17 +235,6 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             "source_type": "snapshot",
         }
 
-        if args.output_md:
-            md_content = generate_full_markdown_report(
-                pairwise_consistency=pairwise_cons,
-                retrieval_consistency=retrieval_cons_list,
-                pairwise_throughput=pairwise_tp,
-                retrieval_throughput=retrieval_tp_list,
-            )
-            out_p = Path(args.output_md)
-            out_p.write_text(md_content, encoding="utf-8")
-            print(f"\n[OK] 完整 Markdown 评测报告已保存至: {out_p.resolve()}")
-
         if args.output_json:
             out_json_p = Path(args.output_json)
             save_json_report(
@@ -293,8 +281,9 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     else:
         print("[*] 跳过 matchms 清洗 (--no-clean 指定)")
     seed = getattr(args, "seed", 2026)
+    mgf_val = getattr(args, "mgf", None) or getattr(args, "mgf_opt", None)
     dataset = load_benchmark_dataset(
-        mgf_path=args.mgf,
+        mgf_path=mgf_val,
         library_size=args.library_size,
         clean_config=clean_cfg,
         max_records=getattr(args, "max_records", None),
@@ -506,17 +495,6 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         "clean_min_rel": args.clean_min_rel if getattr(args, "clean", True) else None,
     }
 
-    if args.output_md:
-        md_content = generate_full_markdown_report(
-            pairwise_consistency=pairwise_cons,
-            retrieval_consistency=retrieval_cons_list,
-            pairwise_throughput=pairwise_tp,
-            retrieval_throughput=retrieval_tp_list,
-        )
-        out_p = Path(args.output_md)
-        out_p.write_text(md_content, encoding="utf-8")
-        print(f"\n[OK] 完整 Markdown 评测报告已保存至: {out_p.resolve()}")
-
     if args.output_json:
         out_json_p = Path(args.output_json)
         save_json_report(
@@ -545,7 +523,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jetf",
         description="JET-Forest: 前体自适应浅层包络森林质谱检索引擎",
@@ -608,7 +586,8 @@ def main(argv: list[str] | None = None) -> int:
         default="all",
         help="评测模式: all (全部), consistency (仅一致性), throughput (仅吞吐量)",
     )
-    p_bench.add_argument("--mgf", type=str, default=None, help="参考库 MGF 文件路径 (默认自动查找 GNPS-LIBRARY.mgf)")
+    p_bench.add_argument("mgf", nargs="?", type=str, default=None, help="参考库 MGF 文件路径 (可选位置参数，与 --mgf 等价)")
+    p_bench.add_argument("--mgf", dest="mgf_opt", type=str, default=None, help="参考库 MGF 文件路径 (可选选项参数，与位置参数等价)")
     p_bench.add_argument("--library-size", type=int, default=2000, help="测试参考库容量大小 (默认 2000)")
     p_bench.add_argument("--n-queries", type=int, default=30, help="抽样查询谱数量 (默认 30)")
     p_bench.add_argument("--n-pairs", type=int, default=1000, help="算子微基准测试谱对数 (默认 1000)")
@@ -634,7 +613,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_bench.add_argument("--clean-max-peaks", type=int, default=300, help="清洗时单谱最多保留峰数 (默认 300)")
     p_bench.add_argument("--clean-min-rel", type=float, default=0.001, help="清洗时相对强度阈值 (默认 0.001)")
-    p_bench.add_argument("-o", "--output-md", type=str, default=None, help="输出 Markdown 报告路径")
     p_bench.add_argument(
         "-j",
         "--output-json",
@@ -656,7 +634,11 @@ def main(argv: list[str] | None = None) -> int:
         help="从 MGF 文件最大读取谱图数 (默认对于大文件自动智能限制)",
     )
     p_bench.add_argument("--seed", type=int, default=2026, help="基准评测随机数种子 (默认 2026)")
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "build":
         return cmd_build(args)

@@ -7,6 +7,7 @@ __version__ = "0.1.0"
 from jetf.bounds import (
     NodeEnvelope,
     QueryContext,
+    adaptive_numba_threads,
     batch_node_bounds,
     batch_root_bounds,
     build_query_context,
@@ -15,7 +16,7 @@ from jetf.bounds import (
 from jetf.builder import build_forest_index
 from jetf.bvh_sah import sah_cost, split_sah_bvh
 from jetf.exhaustive import search_exhaustive
-from jetf.search import search_forest
+from jetf.search import search_forest, search_forest_batch
 from jetf.cleaning import (
     DEFAULT_CLEAN_CONFIG,
     MatchmsCleanConfig,
@@ -82,7 +83,9 @@ __all__ = [
     "split_sah_bvh",
     "build_forest_index",
     "search_forest",
+    "search_forest_batch",
     "search_exhaustive",
+    "adaptive_numba_threads",
     "save_forest_snapshot",
     "load_forest_snapshot",
     "parse_mgf",

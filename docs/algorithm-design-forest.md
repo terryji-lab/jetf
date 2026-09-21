@@ -87,6 +87,11 @@ JET-Forest 彻底抛弃“全局单根深树”，重塑为三级混合架构：
 设查询谱为 $Q = \{(m_i, u_i)\}$，匹配容差为 $\tau = 0.02$ Da。**前置条件：查询峰强度必须非负（$u_i \ge 0$）且经过 L2 归一化（$\sum_i u_i^2 = 1$）**。
 - 查询峰 $i$ 的兼容 cell 集合定义为与区间 $[m_i - \tau, m_i + \tau]$ 相交的所有 cell：
   $$E(i) = \left\{ h \in \mathbb{Z} : \left\lfloor \frac{m_i - \tau}{\delta_e} \right\rfloor \le h \le \left\lfloor \frac{m_i + \tau}{\delta_e} \right\rfloor \right\}$$
+
+> **工程实现注记（浮点边界安全扩展）**：
+> 在双精度浮点 IEEE 754 运算中，当 $m_i \pm \tau$ 落在 $\delta_e$ 格点临界处时，为杜绝因除法取整产生的单元偏差导致假阴性漏检，生产代码 `window_cells`（`src/jetf/bounds.py`）采用了向外安全偏置与向后取相邻浮点数（`nextafter`）：
+> $$h_{\text{lower}} = \left\lfloor \frac{\text{nextafter}(m_i - \tau + 10^{-12}, -\infty)}{\delta_e} \right\rfloor, \quad h_{\text{upper}} = \left\lfloor \frac{\text{nextafter}(m_i + \tau + 10^{-12}, +\infty)}{\delta_e} \right\rfloor$$
+> 相应地，在建库期索引构建（`src/jetf/builder.py` 与 `preprocessing.py`）中，库峰 $m$ 所属 cell 量化统一采用 $h_{\text{lib}} = \lfloor (m + 10^{-12})/\delta_e \rfloor$。二者协同在数学与数值实现上严格保证：对于任意满足 $|m - m_i| \le \tau$ 的候选峰 $m$，恒有 $h_{\text{lib}} \in [h_{\text{lower}}, h_{\text{upper}}]$，严格满足 $E_B(i)$ 覆盖所有可能候选峰的零漏检不变性（Zero False Dismissals Invariance）。
 - 查询峰在节点 $B$ 内的命中 cell 集合为 $E_B(i) = E(i) \cap Z(B)$。
 - **节点峰上界**：
   $$U_{peak}(B) = \sum_{i} u_i \cdot \max_{h \in E_B(i)} m_h(B)$$
@@ -357,10 +362,11 @@ flowchart TD
 
 1. **绝对一致性铁律（100% Exact Equivalency）**：
    - 无论开启 Top-K 检索、Threshold 检索，无论 $\theta$ 门槛高低，系统检索输出的 `hits` 列表必须与 `search_exhaustive`（穷举基线）及 `matchms` 的 `CosineGreedy` **逐位相同（Bit-exact Match）**。
-2. **浮点结合律与余量纪律（Inflation Discipline）**：
-   - 叶节点构建时，最大单峰幅度必须调用 `inflate_upper_bounds(x)` 上偏一次（乘以 $1 + 10^{-12}$）；
-   - 根节点合并叶节点时，只取 $\max$，严禁存储侧重复上偏；
-   - 节点级查询求值 `batch_node_bounds` 与单谱精确上界 `single_spectrum_bound` 统一使用相对余量 `×(1 + 10⁻¹²)`，门槛判断严格满足弱对偶上界包含性。
+2. **浮点结合律与余量纪律（Inflation & Quantization Discipline）**：
+   - **峰幅度相对余量上偏**：叶节点构建时，最大单峰幅度必须调用 `inflate_upper_bounds(x)` 上偏一次（乘以 $1 + 10^{-12}$）；根节点合并叶节点时，只取 $\max$，严禁存储侧重复上偏；节点级查询求值 `batch_node_bounds` 与单谱精确上界 `single_spectrum_bound` 统一使用相对余量 `×(1 + 10⁻¹²)`，门槛判断严格满足弱对偶上界包含性；
+   - **网格量化与边界截断安全偏置**：建库期库峰 cell 下标量化统一采用 $\lfloor (m + 10^{-12}) / \delta_e \rfloor$；查询期 `window_cells` 对兼容窗口下界向 $-\infty$ 取 `nextafter`、上界向 $+\infty$ 取 `nextafter`（均叠加 $+10^{-12}$ 绝对偏置）：
+     $$h_{\text{lower}} = \left\lfloor \frac{\text{nextafter}(m_i - \tau + 10^{-12}, -\infty)}{\delta_e} \right\rfloor, \quad h_{\text{upper}} = \left\lfloor \frac{\text{nextafter}(m_i + \tau + 10^{-12}, +\infty)}{\delta_e} \right\rfloor$$
+     从数值底层杜绝 IEEE 754 浮点临界舍入导致的 off-by-one 单元偏差与假阴性漏检，确保与 3.3 节工程注记及 `src/jetf/bounds.py` 实现自洽闭环、互为印证。
 3. **JIT 叶上界单调二分与无锁并发纪律**：
    - 叶上界内核 `_leaf_bound_numba` 采用连续指针循环与单调二分边界推进，禁止在内层循环内创建任何 Python 对象或 NumPy 数组；
    - 内核声明 `nogil=True`，多线程并发检索共享只读 `ForestIndex` 内存，私有化维护各自的 `ResultSet` 优先队列，彻底规避锁争用。

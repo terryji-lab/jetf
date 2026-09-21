@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import heapq
 import math
 import time
@@ -9,6 +10,7 @@ import numpy as np
 
 from jetf.bounds import (
     _HAVE_NUMBA,
+    adaptive_numba_threads,
     batch_node_bounds,
     batch_root_bounds,
     build_query_context,
@@ -33,6 +35,8 @@ from jetf.scoring import score_greedy_cosine, single_spectrum_bound
 from jetf.structure import ForestIndex
 from jetf.types import INTERNAL_ID_DTYPE, SpectrumMeta, SpectrumPeaks, validate_query
 
+from typing import Sequence
+
 if _HAVE_NUMBA:
     from jetf.bounds import _batch_node_bounds_numba
 
@@ -47,7 +51,7 @@ def _evaluate_leaf_spectra(
     config: QueryConfig,
     results: ResultSet,
     timers: EvalTimers,
-    scored_mask: NDArray[np.bool_],
+    scored_rows: set[int],
     frag_tau: float,
     uind: bool,
 ) -> tuple[int, int]:
@@ -59,7 +63,7 @@ def _evaluate_leaf_spectra(
 
     for iid in range(id_start, id_end):
         row = int(forest.internal_to_row[iid])
-        if scored_mask[row]:
+        if row in scored_rows:
             continue
         meta = spectra[row]
 
@@ -82,7 +86,7 @@ def _evaluate_leaf_spectra(
         timers.exact_eval_ms += elapsed_ms(t_estart)
 
         n_scored_delta += 1
-        scored_mask[row] = True
+        scored_rows.add(row)
 
         if score_res.n_matched >= config.min_matched_peaks:
             results.update(
@@ -144,7 +148,7 @@ def search_forest(
 
     timers = EvalTimers()
     results = ResultSet(config)
-    scored_mask = np.zeros(n_spectra, dtype=np.bool_)
+    scored_rows: set[int] = set()
     n_scored = 0
 
     # 0 峰空谱快速短路
@@ -155,7 +159,7 @@ def search_forest(
                 ion_mode=forest.zero_energy_members.ion_mode,
                 precursor_mz=forest.zero_energy_members.precursor_mz,
             )
-            supplement_zero_score(results, spectra, config, candidates, scored_mask)
+            supplement_zero_score(results, spectra, config, candidates, scored_rows)
         hits = results.finish()
         pruned_by_layer = {
             "roots_pruned": 0,
@@ -301,7 +305,7 @@ def search_forest(
                     leaves_pruned += 1
                 else:
                     sc, up = _evaluate_leaf_spectra(
-                        lid, query, forest, spectra, config, results, timers, scored_mask, frag_tau, uind
+                        lid, query, forest, spectra, config, results, timers, scored_rows, frag_tau, uind
                     )
                     n_scored += sc
                     uind_pruned += up
@@ -350,7 +354,7 @@ def search_forest(
         else:
             # 精评叶节点
             sc, up = _evaluate_leaf_spectra(
-                node_id, query, forest, spectra, config, results, timers, scored_mask, frag_tau, uind
+                node_id, query, forest, spectra, config, results, timers, scored_rows, frag_tau, uind
             )
             n_scored += sc
             uind_pruned += up
@@ -362,7 +366,7 @@ def search_forest(
             ion_mode=forest.zero_energy_members.ion_mode,
             precursor_mz=forest.zero_energy_members.precursor_mz,
         )
-        supplement_zero_score(results, spectra, config, candidates, scored_mask)
+        supplement_zero_score(results, spectra, config, candidates, scored_rows)
 
     hits = results.finish()
 
@@ -389,3 +393,69 @@ def search_forest(
         stats=stats,
         versions=versions,
     )
+
+
+def search_forest_batch(
+    queries: Sequence[SpectrumPeaks],
+    forest: ForestIndex,
+    library: PreprocessedLibrary | None = None,
+    config: QueryConfig | Sequence[QueryConfig] | None = None,
+    concurrency: int = 1,
+) -> list[SearchOutcome]:
+    """多查询批量检索，内置自适应多线程并发控制与线程安全隔离。
+
+    参数:
+        queries: 查询谱列表 (SpectrumPeaks)。
+        forest: 森林索引 (ForestIndex)。
+        library: 预处理参考库 (PreprocessedLibrary)，若快照已自包含元数据可为 None。
+        config: 单个统一 QueryConfig，或与 queries 长度相同的 QueryConfig 序列。
+        concurrency: 并发工作线程数 (默认 1 为串行)。
+
+    返回:
+        按输入 queries 顺序严格排列的 SearchOutcome 列表。
+    """
+    n_queries = len(queries)
+    if n_queries == 0:
+        return []
+
+    if config is None:
+        raise ValueError("必须提供 config 参数 (QueryConfig 或其序列)")
+
+    if isinstance(config, QueryConfig):
+        cfg_list = [config] * n_queries
+    elif isinstance(config, Sequence):
+        if len(config) != n_queries:
+            raise ValueError(
+                f"config 序列长度 ({len(config)}) 与 queries 长度 ({n_queries}) 不匹配"
+            )
+        cfg_list = list(config)
+    else:
+        raise TypeError(f"未知的 config 类型: {type(config).__name__}")
+
+    effective_concurrency = max(1, min(concurrency, n_queries))
+
+    with adaptive_numba_threads(effective_concurrency) as target_inner:
+        if effective_concurrency <= 1:
+            return [
+                search_forest(queries[i], forest, library, cfg_list[i])
+                for i in range(n_queries)
+            ]
+        else:
+            def _init_worker(inner_threads: int | None) -> None:
+                if inner_threads is not None:
+                    try:
+                        import numba
+                        numba.set_num_threads(inner_threads)
+                    except Exception:
+                        pass
+
+            def _worker(idx: int) -> SearchOutcome:
+                return search_forest(queries[idx], forest, library, cfg_list[idx])
+
+            with ThreadPoolExecutor(
+                max_workers=effective_concurrency,
+                initializer=_init_worker,
+                initargs=(target_inner,),
+            ) as executor:
+                return list(executor.map(_worker, range(n_queries)))
+
