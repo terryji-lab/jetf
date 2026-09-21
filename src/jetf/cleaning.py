@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import math
 from typing import Sequence
 
@@ -20,6 +21,18 @@ from jetf.types import (
     SpectrumMeta,
     SpectrumPeaks,
 )
+
+
+def silence_matchms_logging() -> None:
+    """静音 matchms 的 WARNING 与 INFO 日志输出，避免海量谱图处理时 I/O 阻塞。"""
+    matchms_logger = logging.getLogger("matchms")
+    matchms_logger.setLevel(logging.ERROR)
+    for handler in matchms_logger.handlers:
+        handler.setLevel(logging.ERROR)
+
+
+# 模块加载时执行静音
+silence_matchms_logging()
 
 
 @dataclass(frozen=True)
@@ -56,6 +69,8 @@ def clean_spectrum_with_matchms(
 ) -> "matchms.Spectrum" | None:
     """使用 matchms 标准算子对单条谱图执行元数据与碎片峰清洗。"""
     import matchms.filtering as mf
+
+    silence_matchms_logging()
 
     s = spectrum
     if s is None:

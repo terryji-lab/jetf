@@ -7,9 +7,16 @@ import math
 import time
 import numpy as np
 
-from jetf.bounds import batch_root_bounds, build_query_context, peak_bound, window_cells
+from jetf.bounds import (
+    _HAVE_NUMBA,
+    batch_node_bounds,
+    batch_root_bounds,
+    build_query_context,
+    peak_bound,
+    window_cells,
+)
 from jetf.preprocessing import PreprocessedLibrary
-from jetf.query import QueryConfig, ion_mode_passes, is_eligible
+from jetf.query import QueryConfig, SearchMode, ion_mode_passes, is_eligible
 from jetf.results import (
     EvalTimers,
     ResultSet,
@@ -24,9 +31,70 @@ from jetf.results import (
 )
 from jetf.scoring import score_greedy_cosine, single_spectrum_bound
 from jetf.structure import ForestIndex
-from jetf.types import INTERNAL_ID_DTYPE, SpectrumPeaks, validate_query
+from jetf.types import INTERNAL_ID_DTYPE, SpectrumMeta, SpectrumPeaks, validate_query
+
+if _HAVE_NUMBA:
+    from jetf.bounds import _batch_node_bounds_numba
 
 _validate_query = validate_query
+
+
+def _evaluate_leaf_spectra(
+    node_id: int,
+    query: SpectrumPeaks,
+    forest: ForestIndex,
+    spectra: Sequence[SpectrumMeta],
+    config: QueryConfig,
+    results: ResultSet,
+    timers: EvalTimers,
+    scored_mask: NDArray[np.bool_],
+    frag_tau: float,
+    uind: bool,
+) -> tuple[int, int]:
+    """精评单个叶节点的所有合规谱图，更新结果集，返回 (n_scored_delta, uind_pruned_delta)。"""
+    id_start = int(forest.nodes.id_start[node_id])
+    id_end = int(forest.nodes.id_end[node_id])
+    n_scored_delta = 0
+    uind_pruned_delta = 0
+
+    for iid in range(id_start, id_end):
+        row = int(forest.internal_to_row[iid])
+        if scored_mask[row]:
+            continue
+        meta = spectra[row]
+
+        if not is_eligible(config, meta):
+            continue
+
+        member_peaks = forest.postings.spectrum_at(iid)
+
+        if uind:
+            t_ustart = time.perf_counter()
+            u_ind_val = single_spectrum_bound(query, member_peaks, frag_tau)
+            timers.bound_eval_ms += elapsed_ms(t_ustart)
+
+            if u_ind_val < results.theta():
+                uind_pruned_delta += 1
+                continue
+
+        t_estart = time.perf_counter()
+        score_res = score_greedy_cosine(query, member_peaks, frag_tau)
+        timers.exact_eval_ms += elapsed_ms(t_estart)
+
+        n_scored_delta += 1
+        scored_mask[row] = True
+
+        if score_res.n_matched >= config.min_matched_peaks:
+            results.update(
+                SearchHit(
+                    score=score_res.score,
+                    external_id=meta.external_id,
+                    spectrum_index=row,
+                    n_matched=score_res.n_matched,
+                )
+            )
+
+    return n_scored_delta, uind_pruned_delta
 
 
 
@@ -122,6 +190,14 @@ def search_forest(
         else (np.empty(0, dtype=INTERNAL_ID_DTYPE), np.empty(0, dtype=INTERNAL_ID_DTYPE))
     )
 
+    # 提前准备展平数组以供 JIT 零分配内核快速访问
+    env_offsets = forest.envelopes.node_envelope_offsets
+    cell_index = forest.envelopes.cell_index
+    max_peak_amplitude = forest.envelopes.max_peak_amplitude
+    q_intensity = np.ascontiguousarray(query.intensity, dtype=np.float64)
+    q_cell_lower_arr = np.ascontiguousarray(q_cell_lower, dtype=INTERNAL_ID_DTYPE)
+    q_cell_upper_arr = np.ascontiguousarray(q_cell_upper, dtype=INTERNAL_ID_DTYPE)
+
     # 确定离子模式过滤
     eligible_partitions = [
         p
@@ -135,7 +211,7 @@ def search_forest(
     pqueue: list[tuple[float, int, int, bool, int]] = []
     entry_count = 0
 
-    # 1. 批量评估所有合法分区的树根并入堆
+    # 1. 批量评估所有合法分区的树根
     for partition in eligible_partitions:
         p_tstart = partition.tree_start
         p_tend = partition.tree_end
@@ -177,14 +253,60 @@ def search_forest(
 
         curr_theta = results.theta()
         for t_id, u_root in zip(p_trees, u_roots):
-            if u_root < curr_theta:
+            u_float = float(u_root)
+            # 原地剔除低于当前门槛或恒为 0 的无效小树 (200万库约 16.2% 无效小树在此被短路)
+            if u_float < curr_theta or (config.min_matched_peaks > 0 and u_float <= 0.0):
                 roots_pruned += 1
             else:
                 root_id = int(forest.trees.root_node_id[t_id])
                 entry_count += 1
-                heapq.heappush(pqueue, (-float(u_root), entry_count, root_id, False, t_id))
+                pqueue.append((-u_float, entry_count, root_id, False, t_id))
 
-    # 2. 全局 Best-First 逐层展开
+    # O(N) 批量建堆替代 31,303 次单个 heappush
+    heapq.heapify(pqueue)
+
+    # 2. 动态门槛 theta 快速预植入（Top-K 模式下对堆顶最优候选树贪心预精评）
+    if config.mode == SearchMode.TOP_K and pqueue:
+        probe_limit = min(3, len(pqueue))
+        for _ in range(probe_limit):
+            if not pqueue:
+                break
+            top_u = -pqueue[0][0]
+            if top_u <= 0.0:
+                break
+            if results.theta() > -np.inf and top_u < results.theta():
+                break
+
+            # 弹出当前全局根上界最高的小树
+            _, _, _, _, t_id = heapq.heappop(pqueue)
+            leaf_ids = forest.trees.leaves_of_tree(t_id)
+            nodes_visited += len(leaf_ids)
+
+            t_bstart = time.perf_counter()
+            if _HAVE_NUMBA:
+                u_leaves = _batch_node_bounds_numba(
+                    leaf_ids, env_offsets, cell_index, max_peak_amplitude, q_intensity, q_cell_lower_arr, q_cell_upper_arr
+                )
+            else:
+                u_leaves = batch_node_bounds(query, forest, leaf_ids, q_cell_lower, q_cell_upper)
+            timers.bound_eval_ms += elapsed_ms(t_bstart)
+
+            # 按叶节点上界从高到低精评
+            sorted_leaf_idx = np.argsort(-u_leaves)
+            for l_idx in sorted_leaf_idx:
+                lid = int(leaf_ids[l_idx])
+                u_l = float(u_leaves[l_idx])
+                curr_th = results.theta()
+                if u_l < curr_th or (config.min_matched_peaks > 0 and u_l <= 0.0):
+                    leaves_pruned += 1
+                else:
+                    sc, up = _evaluate_leaf_spectra(
+                        lid, query, forest, spectra, config, results, timers, scored_mask, frag_tau, uind
+                    )
+                    n_scored += sc
+                    uind_pruned += up
+
+    # 3. 全局 Best-First 逐层展开
     while pqueue:
         neg_u, _, node_id, is_leaf, t_id = heapq.heappop(pqueue)
         u_val = -neg_u
@@ -204,61 +326,34 @@ def search_forest(
             break
 
         if not is_leaf:
-            # 展开树根 -> 将其所有叶子压入堆
+            # 展开树根 -> 直接调用 JIT 批量求叶界，零内存分配
             leaf_ids = forest.trees.leaves_of_tree(t_id)
-            for lid in leaf_ids:
-                nodes_visited += 1
+            nodes_visited += len(leaf_ids)
 
-                t_bstart = time.perf_counter()
-                leaf_env = forest.envelope_of(lid)
-                ctx_leaf = build_query_context(query, leaf_env, frag_tau, q_cell_lower, q_cell_upper)
-                u_leaf = peak_bound(ctx_leaf, leaf_env)
-                timers.bound_eval_ms += elapsed_ms(t_bstart)
+            t_bstart = time.perf_counter()
+            if _HAVE_NUMBA:
+                u_leaves = _batch_node_bounds_numba(
+                    leaf_ids, env_offsets, cell_index, max_peak_amplitude, q_intensity, q_cell_lower_arr, q_cell_upper_arr
+                )
+            else:
+                u_leaves = batch_node_bounds(query, forest, leaf_ids, q_cell_lower, q_cell_upper)
+            timers.bound_eval_ms += elapsed_ms(t_bstart)
 
-                if u_leaf < results.theta():
+            curr_theta = results.theta()
+            for lid, u_leaf in zip(leaf_ids, u_leaves):
+                u_l_val = float(u_leaf)
+                if u_l_val < curr_theta or (config.min_matched_peaks > 0 and u_l_val <= 0.0):
                     leaves_pruned += 1
                 else:
                     entry_count += 1
-                    heapq.heappush(pqueue, (-u_leaf, entry_count, lid, True, t_id))
+                    heapq.heappush(pqueue, (-u_l_val, entry_count, int(lid), True, t_id))
         else:
             # 精评叶节点
-            id_start = int(forest.nodes.id_start[node_id])
-            id_end = int(forest.nodes.id_end[node_id])
-
-            for iid in range(id_start, id_end):
-                row = int(forest.internal_to_row[iid])
-                meta = spectra[row]
-
-                if not is_eligible(config, meta):
-                    continue
-
-                member_peaks = forest.postings.spectrum_at(iid)
-
-                if uind:
-                    t_ustart = time.perf_counter()
-                    u_ind_val = single_spectrum_bound(query, member_peaks, frag_tau)
-                    timers.bound_eval_ms += elapsed_ms(t_ustart)
-
-                    if u_ind_val < results.theta():
-                        uind_pruned += 1
-                        continue
-
-                t_estart = time.perf_counter()
-                score_res = score_greedy_cosine(query, member_peaks, frag_tau)
-                timers.exact_eval_ms += elapsed_ms(t_estart)
-
-                n_scored += 1
-                scored_mask[row] = True
-
-                if score_res.n_matched >= config.min_matched_peaks:
-                    results.update(
-                        SearchHit(
-                            score=score_res.score,
-                            external_id=meta.external_id,
-                            spectrum_index=row,
-                            n_matched=score_res.n_matched,
-                        )
-                    )
+            sc, up = _evaluate_leaf_spectra(
+                node_id, query, forest, spectra, config, results, timers, scored_mask, frag_tau, uind
+            )
+            n_scored += sc
+            uind_pruned += up
 
     # 4. 零分记录按元数据资格补足
     if needs_zero_supplement(results, config):

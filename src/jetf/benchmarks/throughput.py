@@ -58,6 +58,7 @@ class RetrievalThroughputResult:
     avg_pruned_ratio: float
     jetf_latency_std_ms: float = 0.0
     matchms_latency_std_ms: float = 0.0
+    concurrency: int = 1
 
 
 def benchmark_pairwise_throughput(
@@ -125,6 +126,7 @@ def benchmark_retrieval_throughput(
     mode_name: str = "custom",
     warmup: int = 3,
     skip_matchms: bool = False,
+    concurrency: int = 1,
 ) -> RetrievalThroughputResult:
     """评测 1-to-N 库检索的 QPS 与时延指标。支持脱机 ForestIndex 快照与可选跳过 matchms 穷举。"""
     import warnings
@@ -181,12 +183,31 @@ def benchmark_retrieval_throughput(
     jetf_times_ms: list[float] = []
     scored_counts: list[int] = []
 
-    for _, q, q_cfg in parsed_queries:
-        t0 = time.perf_counter()
-        outcome = search_forest(q, forest, library, q_cfg)
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        jetf_times_ms.append(elapsed_ms)
-        scored_counts.append(outcome.stats.n_scored)
+    t_wall_start = time.perf_counter()
+    if concurrency <= 1:
+        for _, q, q_cfg in parsed_queries:
+            t0 = time.perf_counter()
+            outcome = search_forest(q, forest, library, q_cfg)
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            jetf_times_ms.append(elapsed_ms)
+            scored_counts.append(outcome.stats.n_scored)
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _eval_single(item: tuple[int, SpectrumPeaks, QueryConfig]) -> tuple[float, int]:
+            _, q, q_cfg = item
+            t0 = time.perf_counter()
+            outcome = search_forest(q, forest, library, q_cfg)
+            elapsed = (time.perf_counter() - t0) * 1000.0
+            return elapsed, outcome.stats.n_scored
+
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            eval_results = list(executor.map(_eval_single, parsed_queries))
+
+        jetf_times_ms = [res[0] for res in eval_results]
+        scored_counts = [res[1] for res in eval_results]
+
+    wall_duration_s = time.perf_counter() - t_wall_start
 
     # 2. 测量 matchms 检索耗时 (可选)
     matchms_times_ms: list[float] = []
@@ -277,7 +298,8 @@ def benchmark_retrieval_throughput(
     jetf_arr = np.array(jetf_times_ms, dtype=np.float64)
     jetf_mean = float(np.mean(jetf_arr))
     jetf_std = float(np.std(jetf_arr))
-    jetf_qps = 1000.0 / jetf_mean if jetf_mean > 0 else 0.0
+    # 系统级有效 QPS 统计（考虑多核并发墙上时延）
+    jetf_qps = len(parsed_queries) / wall_duration_s if wall_duration_s > 0 else (1000.0 / jetf_mean if jetf_mean > 0 else 0.0)
 
     if not skip_matchms and matchms_times_ms:
         mms_arr = np.array(matchms_times_ms, dtype=np.float64)
@@ -320,6 +342,7 @@ def benchmark_retrieval_throughput(
         avg_pruned_ratio=avg_pruned_ratio,
         jetf_latency_std_ms=jetf_std,
         matchms_latency_std_ms=mms_std,
+        concurrency=concurrency,
     )
 
 

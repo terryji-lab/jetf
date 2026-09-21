@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 
 from jetf.builder import build_forest_index
-from jetf.cleaning import MatchmsCleanConfig, clean_parsed_library
+from jetf.cleaning import MatchmsCleanConfig, clean_parsed_library, silence_matchms_logging
 from jetf.mgf import parse_mgf
 from jetf.preprocessing import preprocess_library
 from jetf.serialization import load_forest_snapshot, save_forest_snapshot
@@ -20,11 +20,16 @@ from jetf.structure import ForestSpec
 
 def cmd_build(args: argparse.Namespace) -> int:
     """构建森林索引快照。"""
+    # 静音 matchms 日志，避免处理百万谱图时输出数十万条 WARNING 刷屏阻塞 I/O
+    silence_matchms_logging()
+
     mgf_path = Path(args.mgf)
     out_path = Path(args.output)
     if out_path.exists() and not getattr(args, "force", False):
         print(f"[ERROR] 快照文件已存在: {out_path}。若需覆盖请指定 --force / -f 参数。")
         return 1
+
+    keep_rejected = getattr(args, "keep_rejected", False)
 
     if getattr(args, "clean", True):
         clean_cfg = MatchmsCleanConfig(
@@ -33,15 +38,15 @@ def cmd_build(args: argparse.Namespace) -> int:
         )
         print(f"[*] 解析并流式执行 matchms 工业级谱图清洗: {mgf_path} (max_peaks={args.clean_max_peaks}, min_rel={args.clean_min_rel})...")
         t0 = time.perf_counter()
-        parsed = parse_mgf(mgf_path, clean_config=clean_cfg)
+        parsed = parse_mgf(mgf_path, clean_config=clean_cfg, keep_rejected=keep_rejected)
         t_clean = time.perf_counter() - t0
-        print(f"    解析与清洗就绪: {parsed.n_spectra} 条有效谱，共 {parsed.n_peaks} 峰 (耗时 {t_clean:.2f}s)")
+        print(f"    解析与清洗就绪: {parsed.n_spectra:,} 条有效谱，共 {parsed.n_peaks:,} 峰 (耗时 {t_clean:.2f}s)")
     else:
         print(f"[*] 解析质谱文件 (跳过清洗): {mgf_path}")
         t0 = time.perf_counter()
-        parsed = parse_mgf(mgf_path)
+        parsed = parse_mgf(mgf_path, keep_rejected=keep_rejected)
         t_parse = time.perf_counter() - t0
-        print(f"    解析完成: {parsed.n_spectra} 条谱，共 {parsed.n_peaks} 峰 (耗时 {t_parse:.2f}s)")
+        print(f"    解析完成: {parsed.n_spectra:,} 条谱，共 {parsed.n_peaks:,} 峰 (耗时 {t_parse:.2f}s)")
 
     print("[*] 预处理与 L2 归一化...")
     t0 = time.perf_counter()
@@ -64,7 +69,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     del library
     gc.collect()
     t_build = time.perf_counter() - t0
-    print(f"    构建完成: {forest.n_trees} 棵小树，{forest.n_nodes} 个节点 (耗时 {t_build:.2f}s)")
+    print(f"    构建完成: {forest.n_trees:,} 棵小树，{forest.n_nodes:,} 个节点 (耗时 {t_build:.2f}s)")
 
     print(f"[*] 保存快照到: {out_path}")
     save_forest_snapshot(forest, out_path)
@@ -167,7 +172,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
                 )
                 tp_queries_top10.append((row, q, c))
             tp_open_top10 = benchmark_retrieval_throughput(
-                forest, tp_queries_top10, mode_name="开放检索 Top-10 (全库无限制)", skip_matchms=skip_matchms
+                forest,
+                tp_queries_top10,
+                mode_name="开放检索 Top-10 (全库无限制)",
+                skip_matchms=skip_matchms,
+                concurrency=args.concurrency,
             )
             retrieval_tp_list.append(tp_open_top10)
 
@@ -183,7 +192,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
                 )
                 tp_queries_top5.append((row, q, c))
             tp_open_top5 = benchmark_retrieval_throughput(
-                forest, tp_queries_top5, mode_name="开放检索 Top-5 (全库无限制)", skip_matchms=skip_matchms
+                forest,
+                tp_queries_top5,
+                mode_name="开放检索 Top-5 (全库无限制)",
+                skip_matchms=skip_matchms,
+                concurrency=args.concurrency,
             )
             retrieval_tp_list.append(tp_open_top5)
 
@@ -199,7 +212,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
                 )
                 tp_queries_thresh.append((row, q, c))
             tp_open_thresh = benchmark_retrieval_throughput(
-                forest, tp_queries_thresh, mode_name="开放检索 Threshold >= 0.50", skip_matchms=skip_matchms
+                forest,
+                tp_queries_thresh,
+                mode_name="开放检索 Threshold >= 0.50",
+                skip_matchms=skip_matchms,
+                concurrency=args.concurrency,
             )
             retrieval_tp_list.append(tp_open_thresh)
 
@@ -212,6 +229,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             "n_pairs": 0,
             "tolerance": args.tolerance,
             "tolerance_da": args.tolerance,
+            "concurrency": args.concurrency,
             "seed": seed,
             "snapshot": str(snap_path),
             "skip_matchms": skip_matchms,
@@ -423,7 +441,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             tp_queries_top10.append((row, q, c))
         skip_matchms = getattr(args, "skip_matchms", False)
         tp_open_top10 = benchmark_retrieval_throughput(
-            dataset, tp_queries_top10, mode_name="开放检索 Top-10 (全库无限制)", skip_matchms=skip_matchms
+            dataset,
+            tp_queries_top10,
+            mode_name="开放检索 Top-10 (全库无限制)",
+            skip_matchms=skip_matchms,
+            concurrency=args.concurrency,
         )
         retrieval_tp_list.append(tp_open_top10)
 
@@ -439,7 +461,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             )
             tp_queries_top5.append((row, q, c))
         tp_open_top5 = benchmark_retrieval_throughput(
-            dataset, tp_queries_top5, mode_name="开放检索 Top-5 (全库无限制)", skip_matchms=skip_matchms
+            dataset,
+            tp_queries_top5,
+            mode_name="开放检索 Top-5 (全库无限制)",
+            skip_matchms=skip_matchms,
+            concurrency=args.concurrency,
         )
         retrieval_tp_list.append(tp_open_top5)
 
@@ -455,7 +481,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             )
             tp_queries_thresh.append((row, q, c))
         tp_open_thresh = benchmark_retrieval_throughput(
-            dataset, tp_queries_thresh, mode_name="开放检索 Threshold >= 0.50", skip_matchms=skip_matchms
+            dataset,
+            tp_queries_thresh,
+            mode_name="开放检索 Threshold >= 0.50",
+            skip_matchms=skip_matchms,
+            concurrency=args.concurrency,
         )
         retrieval_tp_list.append(tp_open_thresh)
 
@@ -545,6 +575,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_build.add_argument("--clean-max-peaks", type=int, default=300, help="清洗时单谱最多保留峰数 (默认 300)")
     p_build.add_argument("--clean-min-rel", type=float, default=0.001, help="清洗时相对强度阈值 (默认 0.001)")
+    p_build.add_argument(
+        "--keep-rejected",
+        action="store_true",
+        default=False,
+        help="保留被隔离谱图的详细记录列表 (默认关闭以节省大库内存)",
+    )
 
     # info 子命令
     p_info = subparsers.add_parser("info", help="查看已构建快照的元数据信息")
@@ -577,6 +613,12 @@ def main(argv: list[str] | None = None) -> int:
     p_bench.add_argument("--n-queries", type=int, default=30, help="抽样查询谱数量 (默认 30)")
     p_bench.add_argument("--n-pairs", type=int, default=1000, help="算子微基准测试谱对数 (默认 1000)")
     p_bench.add_argument("--tolerance", type=float, default=0.02, help="匹配容差 Da (默认 0.02)")
+    p_bench.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="并发查询数 (默认 1，多核吞吐评测推荐 >= 2)",
+    )
     p_bench.add_argument(
         "--clean",
         dest="clean",

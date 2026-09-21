@@ -169,7 +169,7 @@ def peak_bound(context: QueryContext, envelope: NodeEnvelope) -> float:
 
 
 if _HAVE_NUMBA:
-    @numba.njit(parallel=True, fastmath=False)
+    @numba.njit(parallel=True, fastmath=False, nogil=True)
     def _batch_root_bounds_numba(
         tree_ids: NDArray[np.int64],
         root_node_ids: NDArray[np.int64],
@@ -192,13 +192,18 @@ if _HAVE_NUMBA:
             if start >= end:
                 continue
 
+            # 1. 快速包络盒相交过滤：若树最大 cell < 查询最小 cell 或树最小 cell > 查询最大 cell，直接短路
+            if cell_index[end - 1] < cell_lower[0] or cell_index[start] > cell_upper[n_peaks - 1]:
+                continue
+
             s = 0.0
+            k_left = start
             for p in range(n_peaks):
                 c_low = cell_lower[p]
                 c_high = cell_upper[p]
 
-                # 二分查找：定位 cell_index[start:end] 中 >= c_low 的最左侧位置
-                low = start
+                # 单调二分：query 峰质量升序，故 >= c_low 的起点单调不减
+                low = k_left
                 high = end
                 while low < high:
                     mid = (low + high) >> 1
@@ -207,6 +212,8 @@ if _HAVE_NUMBA:
                     else:
                         high = mid
                 k_left = low
+                if k_left >= end:
+                    break
 
                 # 二分查找：定位 cell_index[k_left:end] 中 > c_high 的最左侧位置
                 low = k_left
@@ -228,11 +235,141 @@ if _HAVE_NUMBA:
                     s += q_intensity[p] * m_val
 
             if s > 0.0:
-                out_bounds[i] = s * (1.0 + 1e-12)  # inflate_upper_bound 内联（Numba 不支持外部 Python 函数调用）
+                out_bounds[i] = s * (1.0 + 1e-12)
             else:
                 out_bounds[i] = 0.0
 
         return out_bounds
+
+    @numba.njit(fastmath=False, nogil=True)
+    def _batch_node_bounds_numba(
+        node_ids: NDArray[np.int64],
+        env_offsets: NDArray[np.int64],
+        cell_index: NDArray[np.int64],
+        max_peak_amplitude: NDArray[np.float64],
+        q_intensity: NDArray[np.float64],
+        cell_lower: NDArray[np.int64],
+        cell_upper: NDArray[np.int64],
+    ) -> NDArray[np.float64]:
+        """批量计算一组节点（如叶节点）的上界，单线程纯寄存器累加无内存动态分配。"""
+        n_nodes = node_ids.shape[0]
+        n_peaks = q_intensity.shape[0]
+        out_bounds = np.zeros(n_nodes, dtype=np.float64)
+
+        for i in range(n_nodes):
+            nid = node_ids[i]
+            start = env_offsets[nid]
+            end = env_offsets[nid + 1]
+            if start >= end:
+                continue
+
+            if cell_index[end - 1] < cell_lower[0] or cell_index[start] > cell_upper[n_peaks - 1]:
+                continue
+
+            s = 0.0
+            k_left = start
+            for p in range(n_peaks):
+                c_low = cell_lower[p]
+                c_high = cell_upper[p]
+
+                low = k_left
+                high = end
+                while low < high:
+                    mid = (low + high) >> 1
+                    if cell_index[mid] < c_low:
+                        low = mid + 1
+                    else:
+                        high = mid
+                k_left = low
+                if k_left >= end:
+                    break
+
+                low = k_left
+                high = end
+                while low < high:
+                    mid = (low + high) >> 1
+                    if cell_index[mid] <= c_high:
+                        low = mid + 1
+                    else:
+                        high = mid
+                k_right = low
+
+                if k_right > k_left:
+                    m_val = max_peak_amplitude[k_left]
+                    for k in range(k_left + 1, k_right):
+                        val = max_peak_amplitude[k]
+                        if val > m_val:
+                            m_val = val
+                    s += q_intensity[p] * m_val
+
+            if s > 0.0:
+                out_bounds[i] = s * (1.0 + 1e-12)
+            else:
+                out_bounds[i] = 0.0
+
+        return out_bounds
+
+    @numba.njit(fastmath=False, nogil=True)
+    def _single_node_bound_numba(
+        nid: int,
+        env_offsets: NDArray[np.int64],
+        cell_index: NDArray[np.int64],
+        max_peak_amplitude: NDArray[np.float64],
+        q_intensity: NDArray[np.float64],
+        cell_lower: NDArray[np.int64],
+        cell_upper: NDArray[np.int64],
+    ) -> float:
+        """单节点/叶节点上界标量 JIT 求值内核。"""
+        start = env_offsets[nid]
+        end = env_offsets[nid + 1]
+        if start >= end:
+            return 0.0
+
+        n_peaks = q_intensity.shape[0]
+        if cell_index[end - 1] < cell_lower[0] or cell_index[start] > cell_upper[n_peaks - 1]:
+            return 0.0
+
+        s = 0.0
+        k_left = start
+        for p in range(n_peaks):
+            c_low = cell_lower[p]
+            c_high = cell_upper[p]
+
+            low = k_left
+            high = end
+            while low < high:
+                mid = (low + high) >> 1
+                if cell_index[mid] < c_low:
+                    low = mid + 1
+                else:
+                    high = mid
+            k_left = low
+            if k_left >= end:
+                break
+
+            low = k_left
+            high = end
+            while low < high:
+                mid = (low + high) >> 1
+                if cell_index[mid] <= c_high:
+                    low = mid + 1
+                else:
+                    high = mid
+            k_right = low
+
+            if k_right > k_left:
+                m_val = max_peak_amplitude[k_left]
+                for k in range(k_left + 1, k_right):
+                    val = max_peak_amplitude[k]
+                    if val > m_val:
+                        m_val = val
+                s += q_intensity[p] * m_val
+
+        if s > 0.0:
+            return s * (1.0 + 1e-12)
+        return 0.0
+
+    _leaf_bound_numba = _single_node_bound_numba
 
 
 def _batch_root_bounds_numpy(
@@ -257,6 +394,61 @@ def _batch_root_bounds_numpy(
         root_id = int(root_node_ids[t_id])
         start = int(env_offsets[root_id])
         end = int(env_offsets[root_id + 1])
+        if start >= end:
+            continue
+
+        support = cell_index[start:end]
+        amps = max_peak_amplitude[start:end]
+
+        starts = np.searchsorted(support, cell_lower, side="left").astype(INTERNAL_ID_DTYPE)
+        stops = np.searchsorted(support, cell_upper, side="right").astype(INTERNAL_ID_DTYPE)
+        counts = stops - starts
+
+        total = int(counts.sum())
+        if total == 0:
+            continue
+
+        np.cumsum(counts, out=peak_offsets[1:])
+        support_peaks = np.flatnonzero(counts)
+
+        heads = peak_offsets[:-1]
+        compat_positions = np.repeat(starts, counts) + (
+            np.arange(total, dtype=INTERNAL_ID_DTYPE) - np.repeat(heads, counts)
+        )
+
+        per_peak.fill(0.0)
+        per_peak[support_peaks] = np.maximum.reduceat(
+            amps[compat_positions], peak_offsets[support_peaks]
+        )
+        s = sum_float64(q_intensity * per_peak)
+        if s > 0.0:
+            out_bounds[i] = inflate_upper_bound(s)
+        else:
+            out_bounds[i] = 0.0
+
+    return out_bounds
+
+
+def _batch_node_bounds_numpy(
+    node_ids: NDArray[np.int64],
+    env_offsets: NDArray[np.int64],
+    cell_index: NDArray[np.int64],
+    max_peak_amplitude: NDArray[np.float64],
+    q_intensity: NDArray[np.float64],
+    cell_lower: NDArray[np.int64],
+    cell_upper: NDArray[np.int64],
+) -> NDArray[np.float64]:
+    n_peaks = int(q_intensity.shape[0])
+    n_nodes = int(node_ids.shape[0])
+    out_bounds = np.zeros(n_nodes, dtype=ENERGY_DTYPE)
+
+    per_peak = np.zeros(n_peaks, dtype=ENERGY_DTYPE)
+    peak_offsets = np.zeros(n_peaks + 1, dtype=INTERNAL_ID_DTYPE)
+
+    for i in range(n_nodes):
+        nid = int(node_ids[i])
+        start = int(env_offsets[nid])
+        end = int(env_offsets[nid + 1])
         if start >= end:
             continue
 
@@ -356,3 +548,65 @@ def batch_root_bounds(
         cell_lower_arr,
         cell_upper_arr,
     )
+
+
+def batch_node_bounds(
+    query: SpectrumPeaks,
+    forest: ForestIndex,
+    node_ids: Sequence[int] | NDArray[np.int64],
+    cell_lower: NDArray[np.int64],
+    cell_upper: NDArray[np.int64],
+) -> NDArray[np.float64]:
+    """批量计算一组节点（根节点或叶节点）的包络峰上界 U_peak(Node)。
+
+    若环境存在 Numba，采用零内存分配 JIT 双二分内核进行寄存器级求值；
+    无 Numba 环境时自动降级至 NumPy 向量化复用内核。
+    保证与单个 peak_bound(build_query_context(...)) 计算结果数学完全等价，
+    并在浮点误差范围内严格遵守零漏检（Zero False Dismissals）性质。
+    """
+    n_peaks = int(query.mass.shape[0])
+    n_nodes = len(node_ids)
+    if n_peaks == 0 or n_nodes == 0:
+        return np.zeros(n_nodes, dtype=ENERGY_DTYPE)
+
+    if not (cell_lower.shape[0] == cell_upper.shape[0] == query.intensity.shape[0] == n_peaks):
+        raise ValueError(
+            f"查询向量长度不匹配: mass={n_peaks}, intensity={query.intensity.shape[0]}, "
+            f"cell_lower={cell_lower.shape[0]}, cell_upper={cell_upper.shape[0]}"
+        )
+
+    node_ids_arr = np.ascontiguousarray(node_ids, dtype=INTERNAL_ID_DTYPE)
+    if node_ids_arr.size > 0:
+        if bool(np.any(node_ids_arr < 0) or np.any(node_ids_arr >= forest.envelopes.n_nodes)):
+            raise IndexError(
+                f"node_ids 存在超出合法范围 [0, {forest.envelopes.n_nodes}) 的非法索引"
+            )
+
+    cell_lower_arr = np.ascontiguousarray(cell_lower, dtype=INTERNAL_ID_DTYPE)
+    cell_upper_arr = np.ascontiguousarray(cell_upper, dtype=INTERNAL_ID_DTYPE)
+    q_intensity = np.ascontiguousarray(query.intensity, dtype=ENERGY_DTYPE)
+
+    env_offsets = forest.envelopes.node_envelope_offsets
+    cell_index = forest.envelopes.cell_index
+    max_peak_amplitude = forest.envelopes.max_peak_amplitude
+
+    if _HAVE_NUMBA:
+        return _batch_node_bounds_numba(
+            node_ids_arr,
+            env_offsets,
+            cell_index,
+            max_peak_amplitude,
+            q_intensity,
+            cell_lower_arr,
+            cell_upper_arr,
+        )
+    return _batch_node_bounds_numpy(
+        node_ids_arr,
+        env_offsets,
+        cell_index,
+        max_peak_amplitude,
+        q_intensity,
+        cell_lower_arr,
+        cell_upper_arr,
+    )
+

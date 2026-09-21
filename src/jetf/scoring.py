@@ -173,7 +173,7 @@ def score_greedy_cosine(
 
 
 if _HAVE_NUMBA:
-    @numba.njit(fastmath=False)
+    @numba.njit(fastmath=False, nogil=True)
     def _single_spectrum_bound_numba(
         q_mass: NDArray[np.float64],
         q_intensity: NDArray[np.float64],
@@ -184,6 +184,12 @@ if _HAVE_NUMBA:
         """Numba JIT 内核：双二分定位与标量展开，零数组切片分配。"""
         n_query = q_mass.shape[0]
         n_lib = lib_mass.shape[0]
+        if n_query == 0 or n_lib == 0:
+            return 0.0
+
+        if lib_mass[n_lib - 1] < q_mass[0] - tolerance_da or lib_mass[0] > q_mass[n_query - 1] + tolerance_da:
+            return 0.0
+
         total = 0.0
         k_left = 0
         for p in range(n_query):
@@ -200,6 +206,8 @@ if _HAVE_NUMBA:
                 else:
                     high = mid
             k_left = low
+            if k_left >= n_lib:
+                break
 
             # 二分查找：定位 lib_mass 中 > c_high 的最左侧位置
             low = k_left

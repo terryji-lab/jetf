@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import Enum
 import math
 from pathlib import Path
+import time
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -77,6 +79,7 @@ class ParsedLibrary:
     peak_id: NDArray[np.int64]
     spectrum_offsets: NDArray[np.int64]
     rejected: tuple[RejectedRecord, ...] = ()
+    n_rejected: int | None = None
 
     def __post_init__(self) -> None:
         check_peak_columns(self.mass, self.intensity, self.peak_id)
@@ -91,6 +94,12 @@ class ParsedLibrary:
     @property
     def n_peaks(self) -> int:
         return int(self.mass.shape[0])
+
+    @property
+    def rejected_count(self) -> int:
+        if self.n_rejected is not None:
+            return self.n_rejected
+        return len(self.rejected)
 
     def peak_counts(self) -> NDArray[np.int64]:
         return np.diff(self.spectrum_offsets)
@@ -114,15 +123,28 @@ def _concat_columns(chunks: list[NDArray[np.number]], dtype: np.dtype) -> NDArra
     return np.concatenate(chunks) if chunks else np.empty(0, dtype=dtype)
 
 
+def _print_mgf_progress(total_records: int, valid_count: int, rejected_count: int, t0: float) -> None:
+    elapsed = time.perf_counter() - t0
+    rate = total_records / elapsed if elapsed > 0 else 0.0
+    print(
+        f"    [解析进度] 已处理 {total_records:,} 条谱 | 有效: {valid_count:,} | "
+        f"隔离: {rejected_count:,} | 速率: {rate:.1f} spec/s | 已用时: {elapsed:.1f}s",
+        flush=True,
+    )
+
+
 def parse_mgf(
     path: str | Path,
     max_records: int | None = None,
     clean_config: Any | None = None,
+    keep_rejected: bool = True,
+    progress_interval: int | None = 20000,
 ) -> ParsedLibrary:
     """解析 MGF 文件：合法记录进谱列表，非法记录隔离在 rejected。
 
     若指定 clean_config，则在流式解析时直接执行 matchms 工业级清洗，
     避免在内存中积聚全量未清洗峰数组，大幅降低百万级谱库的物理内存峰值。
+    若 keep_rejected 为 False，则仅统计隔离记录计数，不再保留详细对象以节省百万级谱库内存。
     """
     source_path = str(path)
     file_path = Path(path)
@@ -131,24 +153,32 @@ def parse_mgf(
 
     spectra: list[SpectrumMeta] = []
     rejected: list[RejectedRecord] = []
+    rejected_count = 0
     mass_chunks: list[NDArray[np.float64]] = []
     intensity_chunks: list[NDArray[np.float64]] = []
     offsets = [0]
+    total_records = 0
+    t0 = time.perf_counter()
 
     with open(source_path, "r", encoding="utf-8-sig", errors="replace") as handle:
         for record in _iter_records(handle):
+            total_records += 1
             source = SourceRef(path=source_path, record_index=record.index)
             try:
                 meta, mass, intensity, _ = _parse_record(record, source)
             except _RecordRejected as exc:
-                rejected.append(
-                    RejectedRecord(
-                        source=source,
-                        external_id=_best_effort_external_id(record),
-                        reason=exc.reason,
-                        detail=exc.detail,
+                rejected_count += 1
+                if keep_rejected:
+                    rejected.append(
+                        RejectedRecord(
+                            source=source,
+                            external_id=_best_effort_external_id(record),
+                            reason=exc.reason,
+                            detail=exc.detail,
+                        )
                     )
-                )
+                if progress_interval and total_records % progress_interval == 0:
+                    _print_mgf_progress(total_records, len(spectra), rejected_count, t0)
                 continue
 
             if clean_config is not None:
@@ -156,14 +186,18 @@ def parse_mgf(
 
                 res = clean_single_spectrum_record(meta, mass, intensity, config=clean_config)
                 if res is None:
-                    rejected.append(
-                        RejectedRecord(
-                            source=source,
-                            external_id=meta.external_id,
-                            reason=RejectReason.UNPARSEABLE,
-                            detail=f"经 matchms 预处理后谱图无效或峰数不足 ({clean_config.min_peaks})",
+                    rejected_count += 1
+                    if keep_rejected:
+                        rejected.append(
+                            RejectedRecord(
+                                source=source,
+                                external_id=meta.external_id,
+                                reason=RejectReason.UNPARSEABLE,
+                                detail=f"经 matchms 预处理后谱图无效或峰数不足 ({clean_config.min_peaks})",
+                            )
                         )
-                    )
+                    if progress_interval and total_records % progress_interval == 0:
+                        _print_mgf_progress(total_records, len(spectra), rejected_count, t0)
                     continue
                 meta, mass, intensity = res
 
@@ -171,6 +205,10 @@ def parse_mgf(
             mass_chunks.append(mass)
             intensity_chunks.append(intensity)
             offsets.append(offsets[-1] + int(mass.shape[0]))
+
+            if progress_interval and total_records % progress_interval == 0:
+                _print_mgf_progress(total_records, len(spectra), rejected_count, t0)
+
             if max_records is not None and len(spectra) >= max_records:
                 break
 
@@ -189,6 +227,7 @@ def parse_mgf(
         peak_id=final_pid,
         spectrum_offsets=offsets_arr,
         rejected=tuple(rejected),
+        n_rejected=rejected_count,
     )
 
 

@@ -4,7 +4,14 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-from jetf.bounds import NodeEnvelope, QueryContext, batch_root_bounds, build_query_context, peak_bound
+from jetf.bounds import (
+    NodeEnvelope,
+    QueryContext,
+    batch_node_bounds,
+    batch_root_bounds,
+    build_query_context,
+    peak_bound,
+)
 from jetf.builder import build_forest_index
 from jetf.bvh_sah import sah_cost, split_sah_bvh
 from jetf.exhaustive import search_exhaustive
@@ -107,6 +114,7 @@ __all__ = [
     "build_query_context",
     "peak_bound",
     "batch_root_bounds",
+    "batch_node_bounds",
     "IonMode",
     "PrecursorWindow",
     "SourceRef",

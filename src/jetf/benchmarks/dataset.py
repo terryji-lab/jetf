@@ -156,7 +156,7 @@ def load_benchmark_dataset(
     if effective_max is None and library_size is not None and file_size_mb > 100:
         effective_max = max(library_size * 5, 10000)
 
-    parsed = parse_mgf(resolved_path, max_records=effective_max)
+    parsed = parse_mgf(resolved_path, max_records=effective_max, clean_config=clean_config)
 
     if library_size is not None and library_size < parsed.n_spectra:
         indices = sample_stratified_indices(parsed, target_size=library_size, seed=seed)
@@ -164,9 +164,6 @@ def load_benchmark_dataset(
     else:
         indices = None
         sub_parsed = parsed
-
-    if clean_config is not None:
-        sub_parsed = clean_parsed_library(sub_parsed, clean_config)
 
     library = preprocess_library(sub_parsed, preprocess_spec)
     forest = build_forest_index(library, forest_spec)

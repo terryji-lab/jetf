@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-79%20passed%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-87%20passed%20(100%25)-brightgreen.svg)]()
 
 **JET-Forest**（JETF）是一个独立、高吞吐、零漏检（Zero False Dismissals）的串联质谱（MS/MS）相似度检索引擎。它实现了**前体自适应浅层包络森林与 BVH-SAH 紧致索引**（Precursor-Binned Envelope Forest with SAH Leaf Partitioning）算法体系。
 
@@ -142,7 +142,7 @@ jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.
 
 ## 与 matchms 性能对比 (Benchmark vs matchms)
 
-以代谢组学界工业级参考库 [matchms](https://github.com/matchms/matchms)（`CosineGreedy`, Numba JIT）为基准，在真实 GNPS 质谱库（目标 $N=2,000$，经 matchms 工业级清洗后实际可用 $N=1,991$ 谱，`seed=2026`）及 80 万级大库快照（$N=820,482$ 谱）上系统评测了**结果一致性**与**检索吞吐量**：
+以代谢组学界工业级参考库 [matchms](https://github.com/matchms/matchms)（`CosineGreedy`, Numba JIT）为基准，在真实 GNPS 质谱库（目标 $N=2,000$，经 matchms 工业级清洗后实际可用 $N=1,991$ 谱，`seed=2026`）及 200 万级全量大库快照（$N=2,003,310$ 谱，快照大小 1.52 GB）上系统评测了**结果一致性**与**检索吞吐量**：
 
 ### 1. 结果一致性 (Result Consistency)
 
@@ -159,15 +159,22 @@ jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.
 | **开放检索 Top-5 (全库无限制)** | 1,991 | **159.0** | 28.3 | 6.29±4.08 [5.58] ms | 35.36±12.12 [37.44] ms | **5.6x** | 99.08% |
 | **开放检索 Threshold >= 0.50** | 1,991 | **303.2** | 28.6 | 3.30±4.13 [1.82] ms | 34.94±11.68 [36.75] ms | **10.6x** | 99.76% |
 
-#### 2.2 80 万谱库宏观检索吞吐量 (820,482 谱工业级清洗快照，脱机秒级加载)
+#### 2.2 200 万谱全量 GNPS 库宏观检索吞吐量 (2,003,310 谱脱机秒级加载，二次性能跃升版)
 
-| 检索场景 | 库容量 ($N$) | JETF QPS | JETF 时延 (Mean±Std [Med] ms) | 包络剪枝率 |
-| :--- | :---: | :---: | :---: | :---: |
-| **开放检索 Top-10 (全库无限制)** | 820,482 | **10.3** | 96.82±134.58 [48.05] ms | 99.96% |
-| **开放检索 Top-5 (全库无限制)** | 820,482 | **13.7** | 73.03±102.72 [36.34] ms | 99.96% |
-| **开放检索 Threshold >= 0.50** | 820,482 | **4.6** | 215.36±280.85 [120.30] ms | 99.87% |
+| 检索场景 | 库容量 ($N$) | JETF 单核 QPS | JETF 时延 (Mean±Std [Med] ms) | P95 时延 (ms) | 包络剪枝率 |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **开放检索 Top-10 (全库无限制)** | 2,003,310 | **7.8** | 128.72±103.43 [**96.58**] ms | 350.81 ms | **99.98%** |
+| **开放检索 Top-5 (全库无限制)** | 2,003,310 | **9.3** | 107.36±81.46 [**87.18**] ms | 217.20 ms | **99.98%** |
+| **开放检索 Threshold >= 0.50** | 2,003,310 | **1.7** | 591.01±642.97 [**347.24**] ms | 2023.08 ms | **99.74%** |
 
-> 完整评测报告与复现细节详见：[docs/benchmark-matchms.md](docs/benchmark-matchms.md)（含 [JSON](docs/benchmark-matchms.json) / [CSV](docs/benchmark-matchms.csv)）与 [docs/benchmark-800k.md](docs/benchmark-800k.md)（含 [JSON](docs/benchmark-800k.json) / [CSV](docs/benchmark-800k.csv)）
+> **基准复现与报告生成**：可通过 CLI 评测套件随时重跑并导出最新 Markdown 与 JSON 报告：
+> ```bash
+> # 运行 200 万全库检索基准测试并生成最新报告
+> jetf benchmark --snapshot all_gnps_forest.npz -o docs/benchmark-2m.md -j docs/benchmark-2m.json --skip-matchms
+>
+> # 运行与 matchms 严格一致性及对齐评测
+> jetf benchmark GNPS-LIBRARY.mgf --mode all --clean -o docs/benchmark-matchms.md -j docs/benchmark-matchms.json
+> ```
 
 ---
 
@@ -179,7 +186,8 @@ jetf benchmark --mode all --library-size 2000 --clean -o docs/benchmark-matchms.
 uv run pytest tests/
 ```
 
-- **全量测试 100% 通过 (79/79 passed)**：
+- **全量测试 100% 通过 (87/87 passed)**：
+  - `tests/unit/test_accelerated_search.py`：二次加速计划深度校验（JIT 叶上界单调二分与 AABB 剪枝数值等价性、树根零上界短路、Top-K 动态门槛 $\theta$ 预植入安全保真性、多线程并发检索结果逐项吻合）。
   - `tests/unit/test_review_p0_p1_fixes.py`：量化偏置极限距离边缘用例零漏检验证（$m_{lib}=100.0-10^{-13}, m_q=99.98-10^{-13}$）、全 0 强度谱建库列等长校验与微块对齐、阈值检索临界分一致性 $[threshold - 10^{-12}, threshold - 10^{-13}]$ 及 0 峰空谱快速短路。
   - `tests/unit/test_review_fixes_20260920.py`：包络上界浮点上偏（A1）、0.02 Da 网格单元边界浮点截断安全（A2）、幂变换边界防御（A3）、MGF 严格定界符与 UTF-8 BOM 处理（D1, D3）、电荷 0 与多电荷解析（D4）、快照谱元数据往返与独立脱机检索（D2）、子抽样去重与 rejected 审计保留（D5）、一致性评测剔除自身与空 GT 召回修正（E1-E4）。
   - `tests/unit/test_benchmark_json.py`：系统软硬件元数据采集、结构化 JSON 报告序列化与 CLI `--output-json` 参数集成自测。
@@ -195,6 +203,7 @@ uv run pytest tests/
   - `tests/unit/test_regression_review.py`：输入防护（负强度拦截、mass 升序校验、库指纹防错配、L2 归一化断言、MGF `PRECURSOR_MZ`/`PARENT_MASS`/`SPECTRUM_ID` 多方言兼容）回归防护测试。
   - `tests/unit/test_lean_build_and_snapshot.py`：精简构建与快照序列化往返、指纹校验、库-索引一致性断言。
   - `tests/unit/test_uind_numba.py`：单谱 Uind 上界 Numba JIT 与 NumPy 向量化内核等价性。
+  - `tests/unit/test_identity_search.py`：身份检索全模式覆盖自测。
 
 ---
 

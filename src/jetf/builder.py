@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import time
 
 import numpy as np
 from numpy.typing import NDArray
@@ -116,6 +117,7 @@ def _merge_root_envelope(
 def build_forest_index(
     library: PreprocessedLibrary,
     spec: ForestSpec = DEFAULT_FOREST_SPEC,
+    progress_interval: int | None = 1000,
 ) -> ForestIndex:
     """从 PreprocessedLibrary 构建 JET-Forest 列式森林索引。"""
     if library.spec.grid_da != spec.summary_grid_da:
@@ -142,6 +144,17 @@ def build_forest_index(
     zero_energy_members = ZeroEnergyMembers.from_library(
         library, np.array(zero_rows, dtype=INTERNAL_ID_DTYPE)
     )
+
+    # 估算总树数以支持进度报告
+    mode_counts: dict[IonMode, int] = {}
+    for r in active_rows:
+        m = library.spectra[r].ion_mode
+        mode_counts[m] = mode_counts.get(m, 0) + 1
+    total_expected_trees = sum(
+        (count + spec.tree_capacity - 1) // spec.tree_capacity
+        for count in mode_counts.values()
+    )
+    t_tree_start = time.perf_counter()
 
     # 2. 按离子模式硬分区，模式内部按前体质量严格升序排序
     partitions: list[ForestPartition] = []
@@ -273,6 +286,16 @@ def build_forest_index(
                 env_m.append(m_arr)
 
             tree_leaf_offsets.append(len(tree_leaf_node_ids))
+
+            if progress_interval and current_tree_id % progress_interval == 0:
+                elapsed = time.perf_counter() - t_tree_start
+                rate = current_tree_id / elapsed if elapsed > 0 else 0.0
+                pct = (current_tree_id / total_expected_trees * 100.0) if total_expected_trees > 0 else 0.0
+                print(
+                    f"    [建树进度] 已构建 {current_tree_id:,}/{total_expected_trees:,} 棵小树 "
+                    f"({pct:.1f}%) | 速率: {rate:.1f} trees/s | 已用时: {elapsed:.1f}s",
+                    flush=True,
+                )
 
         part_tree_end = current_tree_id
         part_node_end = current_node_id
