@@ -12,7 +12,6 @@ from jetf import (
     CORRECTNESS_V1,
     DEFAULT_FOREST_SPEC,
     DEFAULT_FRAGMENT_TOLERANCE_DA,
-    PrecursorWindow,
     QueryConfig,
     SCORER_VERSIONED_ID,
     SearchMode,
@@ -36,25 +35,20 @@ def subset_data():
     return library, forest
 
 
-def test_search_forest_identity_matches_exhaustive(subset_data):
+def test_search_forest_open_topk_matches_exhaustive(subset_data):
     library, forest = subset_data
 
-    # 挑选 3 条带不同前体的真实谱作为测试查询
+    # 挑选 3 条带不同前体的真实谱作为全库开放 Top-K 测试查询
     test_rows = [0, 50, 150]
     for row in test_rows:
         meta = library.spectra[row]
-        if meta.precursor_mz is None:
-            continue
-
         q_peaks = library.peaks.spectrum_at(row)
-        window = PrecursorWindow(mz=meta.precursor_mz, tolerance_da=0.5)
 
         config = QueryConfig(
             mode=SearchMode.TOP_K,
             k=10,
             threshold=None,
             ion_mode=meta.ion_mode,
-            precursor_window=window,
             fragment_tolerance_da=DEFAULT_FRAGMENT_TOLERANCE_DA,
             preprocess_version=library.spec.versioned_id,
             scorer_version=SCORER_VERSIONED_ID,

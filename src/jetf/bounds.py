@@ -4,11 +4,25 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
-from jetf.scoring import sum_float64
+try:
+    import numba
+
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+
+if TYPE_CHECKING:
+    from jetf.structure import ForestIndex
+
+from jetf.scoring import (
+    inflate_upper_bound,
+    sum_float64,
+)
 from jetf.types import (
     DEFAULT_FRAGMENT_TOLERANCE_DA,
     ENERGY_DTYPE,
@@ -26,14 +40,25 @@ class NodeEnvelope:
     grid_da: float
     cell_index: NDArray[np.int64]
     max_peak_amplitude: NDArray[np.float64]
-    max_cell_energy: NDArray[np.float64]
 
     def __post_init__(self) -> None:
         check_column("cell_index", self.cell_index, INTERNAL_ID_DTYPE)
         check_column("max_peak_amplitude", self.max_peak_amplitude, ENERGY_DTYPE)
-        check_column("max_cell_energy", self.max_cell_energy, ENERGY_DTYPE)
-        if not (self.cell_index.shape == self.max_peak_amplitude.shape == self.max_cell_energy.shape):
-            raise ValueError("NodeEnvelope 的 cell_index, max_peak_amplitude, max_cell_energy 必须等长")
+        if not (self.cell_index.shape == self.max_peak_amplitude.shape):
+            raise ValueError("NodeEnvelope 的 cell_index, max_peak_amplitude 必须等长")
+
+    @classmethod
+    def _create_unchecked(
+        cls,
+        grid_da: float,
+        cell_index: NDArray[np.int64],
+        max_peak_amplitude: NDArray[np.float64],
+    ) -> NodeEnvelope:
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "grid_da", grid_da)
+        object.__setattr__(obj, "cell_index", cell_index)
+        object.__setattr__(obj, "max_peak_amplitude", max_peak_amplitude)
+        return obj
 
     @property
     def n_cells(self) -> int:
@@ -44,8 +69,8 @@ def window_cells(
     mass: NDArray[np.float64], tolerance_da: float, grid_da: float
 ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
     """逐查询峰枚举兼容 cell 的保守超集 [cell_lower, cell_upper]。"""
-    lower = np.nextafter(mass - tolerance_da, -np.inf) / grid_da
-    upper = np.nextafter(mass + tolerance_da, np.inf) / grid_da
+    lower = np.nextafter(mass - tolerance_da + 1e-12, -np.inf) / grid_da
+    upper = np.nextafter(mass + tolerance_da + 1e-12, np.inf) / grid_da
     return (
         np.floor(lower).astype(INTERNAL_ID_DTYPE),
         np.floor(upper).astype(INTERNAL_ID_DTYPE),
@@ -82,13 +107,11 @@ class QueryContext:
     tolerance_da: float
     mass: NDArray[np.float64]
     intensity: NDArray[np.float64]
-    energy: NDArray[np.float64]
     cell_lower: NDArray[np.int64]
     cell_upper: NDArray[np.int64]
     peak_offsets: NDArray[np.int64]
     compatible_positions: NDArray[np.int64]
     n_support_cells: int
-    support_energy: float
 
     @property
     def n_peaks(self) -> int:
@@ -96,31 +119,33 @@ class QueryContext:
 
 
 def build_query_context(
-    query: SpectrumPeaks, envelope: NodeEnvelope, tolerance_da: float = DEFAULT_FRAGMENT_TOLERANCE_DA
+    query: SpectrumPeaks,
+    envelope: NodeEnvelope,
+    tolerance_da: float = DEFAULT_FRAGMENT_TOLERANCE_DA,
+    cell_lower: NDArray[np.int64] | None = None,
+    cell_upper: NDArray[np.int64] | None = None,
 ) -> QueryContext:
     """构建查询谱针对该节点包络的上下文。"""
     support = envelope.cell_index
-    cell_lower, cell_upper = window_cells(query.mass, tolerance_da, envelope.grid_da)
+    if cell_lower is None or cell_upper is None:
+        cell_lower, cell_upper = window_cells(query.mass, tolerance_da, envelope.grid_da)
     counts, starts = _support_spans(support, cell_lower, cell_upper)
 
     peak_offsets = np.zeros(int(query.mass.shape[0]) + 1, dtype=INTERNAL_ID_DTYPE)
     np.cumsum(counts, out=peak_offsets[1:])
 
     compat_positions = _expand_spans(starts, counts)
-    support_e = sum_float64(query.energy[counts > 0]) if counts.size > 0 else 0.0
 
     return QueryContext(
         grid_da=envelope.grid_da,
         tolerance_da=tolerance_da,
         mass=query.mass,
         intensity=query.intensity,
-        energy=query.energy,
         cell_lower=cell_lower,
         cell_upper=cell_upper,
         peak_offsets=peak_offsets,
         compatible_positions=compat_positions,
         n_support_cells=int(support.shape[0]),
-        support_energy=support_e,
     )
 
 
@@ -140,4 +165,194 @@ def peak_bound(context: QueryContext, envelope: NodeEnvelope) -> float:
     per_peak[support_peaks] = np.maximum.reduceat(
         amplitudes, context.peak_offsets[support_peaks]
     )
-    return sum_float64(context.intensity * per_peak)
+    return inflate_upper_bound(sum_float64(context.intensity * per_peak))
+
+
+if _HAVE_NUMBA:
+    @numba.njit(parallel=True, fastmath=False)
+    def _batch_root_bounds_numba(
+        tree_ids: NDArray[np.int64],
+        root_node_ids: NDArray[np.int64],
+        env_offsets: NDArray[np.int64],
+        cell_index: NDArray[np.int64],
+        max_peak_amplitude: NDArray[np.float64],
+        q_intensity: NDArray[np.float64],
+        cell_lower: NDArray[np.int64],
+        cell_upper: NDArray[np.int64],
+    ) -> NDArray[np.float64]:
+        n_trees = tree_ids.shape[0]
+        n_peaks = q_intensity.shape[0]
+        out_bounds = np.zeros(n_trees, dtype=np.float64)
+
+        for i in numba.prange(n_trees):
+            t_id = tree_ids[i]
+            root_id = root_node_ids[t_id]
+            start = env_offsets[root_id]
+            end = env_offsets[root_id + 1]
+            if start >= end:
+                continue
+
+            s = 0.0
+            for p in range(n_peaks):
+                c_low = cell_lower[p]
+                c_high = cell_upper[p]
+
+                # 二分查找：定位 cell_index[start:end] 中 >= c_low 的最左侧位置
+                low = start
+                high = end
+                while low < high:
+                    mid = (low + high) >> 1
+                    if cell_index[mid] < c_low:
+                        low = mid + 1
+                    else:
+                        high = mid
+                k_left = low
+
+                # 二分查找：定位 cell_index[k_left:end] 中 > c_high 的最左侧位置
+                low = k_left
+                high = end
+                while low < high:
+                    mid = (low + high) >> 1
+                    if cell_index[mid] <= c_high:
+                        low = mid + 1
+                    else:
+                        high = mid
+                k_right = low
+
+                if k_right > k_left:
+                    m_val = max_peak_amplitude[k_left]
+                    for k in range(k_left + 1, k_right):
+                        val = max_peak_amplitude[k]
+                        if val > m_val:
+                            m_val = val
+                    s += q_intensity[p] * m_val
+
+            if s > 0.0:
+                out_bounds[i] = s * (1.0 + 1e-12)  # inflate_upper_bound 内联（Numba 不支持外部 Python 函数调用）
+            else:
+                out_bounds[i] = 0.0
+
+        return out_bounds
+
+
+def _batch_root_bounds_numpy(
+    tree_ids: NDArray[np.int64],
+    root_node_ids: NDArray[np.int64],
+    env_offsets: NDArray[np.int64],
+    cell_index: NDArray[np.int64],
+    max_peak_amplitude: NDArray[np.float64],
+    q_intensity: NDArray[np.float64],
+    cell_lower: NDArray[np.int64],
+    cell_upper: NDArray[np.int64],
+) -> NDArray[np.float64]:
+    n_peaks = int(q_intensity.shape[0])
+    n_trees = int(tree_ids.shape[0])
+    out_bounds = np.zeros(n_trees, dtype=ENERGY_DTYPE)
+
+    per_peak = np.zeros(n_peaks, dtype=ENERGY_DTYPE)
+    peak_offsets = np.zeros(n_peaks + 1, dtype=INTERNAL_ID_DTYPE)
+
+    for i in range(n_trees):
+        t_id = int(tree_ids[i])
+        root_id = int(root_node_ids[t_id])
+        start = int(env_offsets[root_id])
+        end = int(env_offsets[root_id + 1])
+        if start >= end:
+            continue
+
+        support = cell_index[start:end]
+        amps = max_peak_amplitude[start:end]
+
+        starts = np.searchsorted(support, cell_lower, side="left").astype(INTERNAL_ID_DTYPE)
+        stops = np.searchsorted(support, cell_upper, side="right").astype(INTERNAL_ID_DTYPE)
+        counts = stops - starts
+
+        total = int(counts.sum())
+        if total == 0:
+            continue
+
+        np.cumsum(counts, out=peak_offsets[1:])
+        support_peaks = np.flatnonzero(counts)
+
+        heads = peak_offsets[:-1]
+        compat_positions = np.repeat(starts, counts) + (
+            np.arange(total, dtype=INTERNAL_ID_DTYPE) - np.repeat(heads, counts)
+        )
+
+        per_peak.fill(0.0)
+        per_peak[support_peaks] = np.maximum.reduceat(
+            amps[compat_positions], peak_offsets[support_peaks]
+        )
+        s = sum_float64(q_intensity * per_peak)
+        if s > 0.0:
+            out_bounds[i] = inflate_upper_bound(s)
+        else:
+            out_bounds[i] = 0.0
+
+    return out_bounds
+
+
+def batch_root_bounds(
+    query: SpectrumPeaks,
+    forest: ForestIndex,
+    tree_ids: Sequence[int] | NDArray[np.int64],
+    cell_lower: NDArray[np.int64],
+    cell_upper: NDArray[np.int64],
+) -> NDArray[np.float64]:
+    """批量计算一组候选树根节点的峰上界 U_peak(Root)。
+
+    若环境存在 Numba，采用多线程 JIT 并行二分内核进行树级别并行求值；
+    无 Numba 环境时自动降级至 NumPy 向量化复用内核。
+    保证与单个 peak_bound(build_query_context(...)) 计算结果数学完全等价，
+    并在浮点误差范围内严格遵守零漏检（Zero False Dismissals）性质。
+    """
+    n_peaks = int(query.mass.shape[0])
+    n_trees = len(tree_ids)
+    if n_peaks == 0 or n_trees == 0:
+        return np.zeros(n_trees, dtype=ENERGY_DTYPE)
+
+    # 校验输入向量维度一致性
+    if not (cell_lower.shape[0] == cell_upper.shape[0] == query.intensity.shape[0] == n_peaks):
+        raise ValueError(
+            f"查询向量长度不匹配: mass={n_peaks}, intensity={query.intensity.shape[0]}, "
+            f"cell_lower={cell_lower.shape[0]}, cell_upper={cell_upper.shape[0]}"
+        )
+
+    tree_ids_arr = np.ascontiguousarray(tree_ids, dtype=INTERNAL_ID_DTYPE)
+    # 防御非法树索引（避免 Numba 访问越界引发未定义行为）
+    if tree_ids_arr.size > 0:
+        if bool(np.any(tree_ids_arr < 0) or np.any(tree_ids_arr >= forest.n_trees)):
+            raise IndexError(
+                f"tree_ids 存在超出合法范围 [0, {forest.n_trees}) 的非法索引"
+            )
+
+    cell_lower_arr = np.ascontiguousarray(cell_lower, dtype=INTERNAL_ID_DTYPE)
+    cell_upper_arr = np.ascontiguousarray(cell_upper, dtype=INTERNAL_ID_DTYPE)
+    q_intensity = np.ascontiguousarray(query.intensity, dtype=ENERGY_DTYPE)
+
+    root_node_ids = forest.trees.root_node_id
+    env_offsets = forest.envelopes.node_envelope_offsets
+    cell_index = forest.envelopes.cell_index
+    max_peak_amplitude = forest.envelopes.max_peak_amplitude
+
+    if _HAVE_NUMBA:
+        return _batch_root_bounds_numba(
+            tree_ids_arr,
+            root_node_ids,
+            env_offsets,
+            cell_index,
+            max_peak_amplitude,
+            q_intensity,
+            cell_lower_arr,
+            cell_upper_arr,
+        )
+    return _batch_root_bounds_numpy(
+        tree_ids_arr,
+        root_node_ids,
+        env_offsets,
+        cell_index,
+        max_peak_amplitude,
+        q_intensity,
+        cell_lower_arr,
+        cell_upper_arr,
+    )

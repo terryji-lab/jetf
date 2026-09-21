@@ -1,8 +1,8 @@
 """端到端回归：包络森林（JET-Forest）与穷举检索 100% 逐项一致性。
 
 涵盖：
-1. 身份搜索（Top-k、高低阈值、跨树前体窗口）；
-2. 开放搜索（Top-k、高低阈值、包含零分门槛 t=0）；
+1. 开放式检索（Top-k、高低阈值、包含零分门槛 t=0）；
+2. 离子模式匹配策略验证（EXACT、INCLUDE_UNKNOWN、ANY）；
 3. 代表谱（最长、最短、中位、随机抽样）；
 4. 数学安全保证：每一条 hit 逐位一致，绝对零漏检，精评数 <= 穷举。
 """
@@ -23,7 +23,6 @@ from jetf import (
     DEFAULT_FRAGMENT_TOLERANCE_DA,
     ForestIndex,
     ParsedLibrary,
-    PrecursorWindow,
     PreprocessedLibrary,
     QueryConfig,
     SCORER_VERSIONED_ID,
@@ -72,7 +71,7 @@ def _assert_results_equal(res_forest, res_ex):
     for i, (hf, he) in enumerate(zip(res_forest.hits, res_ex.hits)):
         assert hf.external_id == he.external_id, f"第 {i} 条命中 external_id 不符: {hf} vs {he}"
         assert hf.spectrum_index == he.spectrum_index, f"第 {i} 条命中 spectrum_index 不符: {hf} vs {he}"
-        assert pytest.approx(hf.score, abs=1e-12) == he.score, f"第 {i} 条命中 score 不符: {hf} vs {he}"
+        assert hf.score == he.score, f"第 {i} 条命中 score 不符: {hf} vs {he}"
         assert hf.n_matched == he.n_matched, f"第 {i} 条命中 n_matched 不符: {hf} vs {he}"
 
     assert res_forest.stats.n_scored <= res_ex.stats.n_scored, (
@@ -80,8 +79,8 @@ def _assert_results_equal(res_forest, res_ex):
     )
 
 
-def test_forest_identity_topk_exhaustive_consistency(library: PreprocessedLibrary, forest: ForestIndex):
-    """身份检索 Top-K 模式下与穷举检索的一致性验证。"""
+def test_forest_open_diverse_queries_exhaustive_consistency(library: PreprocessedLibrary, forest: ForestIndex):
+    """开放检索下针对代表性极值谱（最长谱、最短谱、典型谱）与穷举检索的一致性验证。"""
     peak_counts = np.diff(library.peaks.spectrum_offsets)
     idx_max = int(np.argmax(peak_counts))
     idx_min = int(np.argmin(peak_counts))
@@ -89,18 +88,13 @@ def test_forest_identity_topk_exhaustive_consistency(library: PreprocessedLibrar
 
     for row in test_rows:
         meta = library.spectra[row]
-        if meta.precursor_mz is None:
-            continue
-
         q_peaks = library.peaks.spectrum_at(row)
-        for tol_da in (0.5, 2.0):
-            window = PrecursorWindow(mz=meta.precursor_mz, tolerance_da=tol_da)
+        for k_val in (5, 10):
             config = QueryConfig(
                 mode=SearchMode.TOP_K,
-                k=10,
+                k=k_val,
                 threshold=None,
                 ion_mode=meta.ion_mode,
-                precursor_window=window,
                 fragment_tolerance_da=DEFAULT_FRAGMENT_TOLERANCE_DA,
                 preprocess_version=library.spec.versioned_id,
                 scorer_version=SCORER_VERSIONED_ID,
@@ -113,34 +107,28 @@ def test_forest_identity_topk_exhaustive_consistency(library: PreprocessedLibrar
             _assert_results_equal(res_forest, res_ex)
 
 
-def test_forest_identity_threshold_exhaustive_consistency(library: PreprocessedLibrary, forest: ForestIndex):
-    """身份检索 Threshold 模式下与穷举检索的一致性验证（涵盖零分门槛）。"""
-    test_rows = [10, 200, 800]
+def test_forest_open_zero_threshold_exhaustive_consistency(library: PreprocessedLibrary, forest: ForestIndex):
+    """开放检索 Threshold=0.00 零分门槛模式下与穷举检索的一致性验证。"""
+    test_rows = [10, 200]
 
     for row in test_rows:
         meta = library.spectra[row]
-        if meta.precursor_mz is None:
-            continue
-
         q_peaks = library.peaks.spectrum_at(row)
-        window = PrecursorWindow(mz=meta.precursor_mz, tolerance_da=1.0)
 
-        for thresh in (0.60, 0.10, 0.00):
-            config = QueryConfig(
-                mode=SearchMode.THRESHOLD,
-                threshold=thresh,
-                ion_mode=meta.ion_mode,
-                precursor_window=window,
-                fragment_tolerance_da=DEFAULT_FRAGMENT_TOLERANCE_DA,
-                preprocess_version=library.spec.versioned_id,
-                scorer_version=SCORER_VERSIONED_ID,
-                snapshot_id="forest_e2e",
-            )
+        config = QueryConfig(
+            mode=SearchMode.THRESHOLD,
+            threshold=0.00,
+            ion_mode=meta.ion_mode,
+            fragment_tolerance_da=DEFAULT_FRAGMENT_TOLERANCE_DA,
+            preprocess_version=library.spec.versioned_id,
+            scorer_version=SCORER_VERSIONED_ID,
+            snapshot_id="forest_e2e",
+        )
 
-            res_ex = search_exhaustive(q_peaks, library, config)
-            res_forest = search_forest(q_peaks, forest, library, config)
+        res_ex = search_exhaustive(q_peaks, library, config)
+        res_forest = search_forest(q_peaks, forest, library, config)
 
-            _assert_results_equal(res_forest, res_ex)
+        _assert_results_equal(res_forest, res_ex)
 
 
 def test_forest_open_topk_exhaustive_consistency(library: PreprocessedLibrary, forest: ForestIndex):

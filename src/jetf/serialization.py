@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import numpy as np
 
@@ -17,7 +18,7 @@ from jetf.structure import (
     ForestTrees,
     ZeroEnergyMembers,
 )
-from jetf.types import INTERNAL_ID_DTYPE
+from jetf.types import INTERNAL_ID_DTYPE, SourceRef, SpectrumMeta
 
 
 def save_forest_snapshot(forest: ForestIndex, path: Path | str) -> None:
@@ -33,8 +34,7 @@ def save_forest_snapshot(forest: ForestIndex, path: Path | str) -> None:
     part_id_start = np.array([p.id_start for p in forest.partitions], dtype=INTERNAL_ID_DTYPE)
     part_id_end = np.array([p.id_end for p in forest.partitions], dtype=INTERNAL_ID_DTYPE)
 
-    np.savez_compressed(
-        target,
+    save_dict = dict(
         spec_versioned_id=str(forest.spec.versioned_id),
         spec_tree_capacity=np.int64(forest.spec.tree_capacity),
         spec_leaf_capacity=np.int64(forest.spec.leaf_capacity),
@@ -58,12 +58,10 @@ def save_forest_snapshot(forest: ForestIndex, path: Path | str) -> None:
         node_id_start=forest.nodes.id_start,
         node_id_end=forest.nodes.id_end,
         node_tree_id=forest.nodes.tree_id,
-        node_envelope_offsets=forest.nodes.envelope_offsets,
         env_grid_da=np.float64(forest.envelopes.grid_da),
         env_node_envelope_offsets=forest.envelopes.node_envelope_offsets,
         env_cell_index=forest.envelopes.cell_index,
         env_max_peak_amplitude=forest.envelopes.max_peak_amplitude,
-        env_max_cell_energy=forest.envelopes.max_cell_energy,
         post_mass=forest.postings.mass,
         post_intensity=forest.postings.intensity,
         post_energy=forest.postings.energy,
@@ -75,7 +73,34 @@ def save_forest_snapshot(forest: ForestIndex, path: Path | str) -> None:
         zero_member=forest.zero_energy_members.member,
         zero_ion_mode=forest.zero_energy_members.ion_mode,
         zero_precursor_mz=forest.zero_energy_members.precursor_mz,
+        library_fingerprint=str(forest.library_fingerprint),
     )
+
+    if forest.spectra is not None:
+        save_dict["has_spectra"] = np.bool_(True)
+        save_dict["meta_external_id"] = np.array([s.external_id for s in forest.spectra], dtype=str)
+        save_dict["meta_precursor_mz"] = np.array(
+            [s.precursor_mz if s.precursor_mz is not None else np.nan for s in forest.spectra],
+            dtype=np.float64,
+        )
+        save_dict["meta_charge"] = np.array(
+            [s.charge if s.charge is not None else -9999 for s in forest.spectra],
+            dtype=np.int32,
+        )
+        save_dict["meta_ion_mode"] = np.array(
+            [ION_MODE_CODES[s.ion_mode] for s in forest.spectra],
+            dtype=np.int8,
+        )
+        save_dict["meta_source_path"] = np.array(
+            [s.source.path for s in forest.spectra],
+            dtype=str,
+        )
+        save_dict["meta_source_index"] = np.array(
+            [s.source.record_index for s in forest.spectra],
+            dtype=np.int64,
+        )
+
+    np.savez_compressed(target, **save_dict)
 
 
 def load_forest_snapshot(path: Path | str) -> ForestIndex:
@@ -84,7 +109,7 @@ def load_forest_snapshot(path: Path | str) -> ForestIndex:
     if not target.exists():
         raise FileNotFoundError(f"快照文件不存在: {target}")
 
-    with np.load(target) as data:
+    with np.load(target, allow_pickle=True) as data:
         spec = ForestSpec(
             versioned_id=str(data["spec_versioned_id"]),
             tree_capacity=int(data["spec_tree_capacity"]),
@@ -131,16 +156,26 @@ def load_forest_snapshot(path: Path | str) -> ForestIndex:
             id_start=data["node_id_start"],
             id_end=data["node_id_end"],
             tree_id=data["node_tree_id"],
-            envelope_offsets=data["node_envelope_offsets"],
         )
 
+        env_offsets = (
+            data["env_node_envelope_offsets"]
+            if "env_node_envelope_offsets" in data
+            else data["node_envelope_offsets"]
+        )
         envelopes = ForestEnvelopes(
             grid_da=float(data["env_grid_da"]),
-            node_envelope_offsets=data["env_node_envelope_offsets"],
+            node_envelope_offsets=env_offsets,
             cell_index=data["env_cell_index"],
             max_peak_amplitude=data["env_max_peak_amplitude"],
-            max_cell_energy=data["env_max_cell_energy"],
         )
+
+        if abs(spec.summary_grid_da - envelopes.grid_da) > 1e-9:
+            raise ValueError(
+                f"快照网格配置不一致: 索引声明 summary_grid_da={spec.summary_grid_da} Da, "
+                f"但包络声明 grid_da={envelopes.grid_da} Da"
+            )
+
 
         postings = ForestPostings(
             mass=data["post_mass"],
@@ -157,6 +192,34 @@ def load_forest_snapshot(path: Path | str) -> ForestIndex:
             precursor_mz=data["zero_precursor_mz"],
         )
 
+        library_fingerprint = str(data["library_fingerprint"]) if "library_fingerprint" in data else ""
+
+        spectra = None
+        if "has_spectra" in data and bool(data["has_spectra"]):
+            ext_ids = data["meta_external_id"]
+            precs = data["meta_precursor_mz"]
+            charges = data["meta_charge"]
+            modes = data["meta_ion_mode"]
+            src_paths = data["meta_source_path"] if "meta_source_path" in data else [""] * n_spectra
+            src_indices = (
+                data["meta_source_index"] if "meta_source_index" in data else list(range(n_spectra))
+            )
+            spec_list = []
+            for i in range(n_spectra):
+                p_mz = float(precs[i]) if math.isfinite(float(precs[i])) else None
+                ch = int(charges[i]) if int(charges[i]) != -9999 else None
+                im = ION_MODES_BY_CODE[int(modes[i])]
+                spec_list.append(
+                    SpectrumMeta(
+                        source=SourceRef(path=str(src_paths[i]), record_index=int(src_indices[i])),
+                        external_id=str(ext_ids[i]),
+                        precursor_mz=p_mz,
+                        charge=ch,
+                        ion_mode=im,
+                    )
+                )
+            spectra = tuple(spec_list)
+
         return ForestIndex(
             spec=spec,
             n_spectra=n_spectra,
@@ -168,4 +231,6 @@ def load_forest_snapshot(path: Path | str) -> ForestIndex:
             internal_to_row=data["internal_to_row"],
             row_to_internal=data["row_to_internal"],
             zero_energy_members=zero_members,
+            library_fingerprint=library_fingerprint,
+            spectra=spectra,
         )

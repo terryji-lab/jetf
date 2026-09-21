@@ -8,6 +8,13 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+try:
+    import numba
+
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+
 from jetf.types import (
     DEFAULT_FRAGMENT_TOLERANCE_DA,
     ENERGY_DTYPE,
@@ -66,13 +73,22 @@ def _empty_result() -> GreedyCosineResult:
 def _legal_edge_indices(
     query: SpectrumPeaks, library: SpectrumPeaks, tolerance_da: float
 ) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
-    """双指针二分枚举全部合法匹配边 (|m_i - n_j| <= tolerance_da)。"""
+    """双指针二分枚举全部合法匹配边 (|m_i - n_j| <= tolerance_da)。
+
+    前置条件:
+    - library.mass 必须按升序排列（用于 searchsorted 二分定位与连续索引切片）；
+    - query 与 library 峰强度必须非负 (>= 0)。
+    """
     n_query = query.mass.shape[0]
-    if n_query == 0 or library.mass.shape[0] == 0:
+    n_lib = library.mass.shape[0]
+    if n_query == 0 or n_lib == 0:
         return (
             np.empty(0, dtype=INTERNAL_ID_DTYPE),
             np.empty(0, dtype=INTERNAL_ID_DTYPE),
         )
+
+    if n_lib > 1 and not np.all(library.mass[:-1] <= library.mass[1:]):
+        raise ValueError("库谱峰质量 (mass) 必须按升序排列")
 
     lower = np.searchsorted(library.mass, query.mass - tolerance_da, side="left")
     upper = np.searchsorted(library.mass, query.mass + tolerance_da, side="right")
@@ -145,12 +161,97 @@ def score_greedy_cosine(
         return _empty_result()
 
     picked = np.array(accepted, dtype=INTERNAL_ID_DTYPE)
+    score = sum_float64(weights[picked])
+    if abs(score - 1.0) <= 1e-12 or score > 1.0:
+        score = 1.0
     return GreedyCosineResult(
-        score=sum_float64(weights[picked]),
+        score=score,
         query_index=query_index[picked],
         library_index=library_index[picked],
         contribution=weights[picked],
     )
+
+
+if _HAVE_NUMBA:
+    @numba.njit(fastmath=False)
+    def _single_spectrum_bound_numba(
+        q_mass: NDArray[np.float64],
+        q_intensity: NDArray[np.float64],
+        lib_mass: NDArray[np.float64],
+        lib_intensity: NDArray[np.float64],
+        tolerance_da: float,
+    ) -> float:
+        """Numba JIT 内核：双二分定位与标量展开，零数组切片分配。"""
+        n_query = q_mass.shape[0]
+        n_lib = lib_mass.shape[0]
+        total = 0.0
+        k_left = 0
+        for p in range(n_query):
+            c_low = q_mass[p] - tolerance_da
+            c_high = q_mass[p] + tolerance_da
+
+            # 二分查找：定位 lib_mass 中 >= c_low 的最左侧位置
+            low = k_left
+            high = n_lib
+            while low < high:
+                mid = (low + high) >> 1
+                if lib_mass[mid] < c_low:
+                    low = mid + 1
+                else:
+                    high = mid
+            k_left = low
+
+            # 二分查找：定位 lib_mass 中 > c_high 的最左侧位置
+            low = k_left
+            high = n_lib
+            while low < high:
+                mid = (low + high) >> 1
+                if lib_mass[mid] <= c_high:
+                    low = mid + 1
+                else:
+                    high = mid
+            k_right = low
+
+            if k_right > k_left:
+                m_val = lib_intensity[k_left]
+                for k in range(k_left + 1, k_right):
+                    val = lib_intensity[k]
+                    if val > m_val:
+                        m_val = val
+                total += q_intensity[p] * m_val
+
+        if total > 0.0:
+            return total * (1.0 + 1e-12)
+        return 0.0
+
+
+def _single_spectrum_bound_numpy(
+    query: SpectrumPeaks,
+    library: SpectrumPeaks,
+    tolerance_da: float = DEFAULT_FRAGMENT_TOLERANCE_DA,
+) -> float:
+    """NumPy 降级实现。"""
+    starts = np.searchsorted(library.mass, query.mass - tolerance_da, side="left")
+    stops = np.searchsorted(library.mass, query.mass + tolerance_da, side="right")
+
+    diff = stops - starts
+    matched_idx = np.flatnonzero(diff > 0)
+    if matched_idx.size == 0:
+        return 0.0
+
+    lib_inten = library.intensity
+    q_inten = query.intensity
+
+    total = 0.0
+    for i in matched_idx:
+        st = int(starts[i])
+        sp = int(stops[i])
+        if sp == st + 1:
+            total += q_inten[i] * lib_inten[st]
+        else:
+            total += q_inten[i] * float(np.max(lib_inten[st:sp]))
+
+    return inflate_upper_bound(total)
 
 
 def single_spectrum_bound(
@@ -160,15 +261,16 @@ def single_spectrum_bound(
 ) -> float:
     """Uind = sum_i u_i · max_(legal j) v_j：单谱放松精确上界。"""
     n_query = query.mass.shape[0]
-    query_index, library_index = _legal_edge_indices(query, library, tolerance_da)
-    if query_index.shape[0] == 0:
+    n_lib = library.mass.shape[0]
+    if n_query == 0 or n_lib == 0:
         return 0.0
 
-    counts = np.bincount(query_index, minlength=n_query)
-    starts = np.cumsum(counts, dtype=INTERNAL_ID_DTYPE) - counts
-    support_peaks = np.flatnonzero(counts)
-    per_peak = np.zeros(n_query, dtype=ENERGY_DTYPE)
-    per_peak[support_peaks] = np.maximum.reduceat(
-        library.intensity[library_index], starts[support_peaks]
-    )
-    return inflate_upper_bound(sum_float64(query.intensity * per_peak))
+    if n_lib > 1 and not np.all(library.mass[:-1] <= library.mass[1:]):
+        raise ValueError("库谱峰质量 (mass) 必须按升序排列")
+
+    if _HAVE_NUMBA:
+        return _single_spectrum_bound_numba(
+            query.mass, query.intensity, library.mass, library.intensity, tolerance_da
+        )
+    return _single_spectrum_bound_numpy(query, library, tolerance_da)
+

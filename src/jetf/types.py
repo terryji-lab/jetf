@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import math
 from typing import Any
@@ -43,22 +43,30 @@ class IonMode(str, Enum):
 
 @dataclass(frozen=True, slots=True)
 class PrecursorWindow:
-    """前体质量检索窗口 [mz - tolerance_da, mz + tolerance_da]。"""
+    """前体离子荷质比检索窗口 [mz - tolerance_da, mz + tolerance_da]。"""
 
     mz: float
     tolerance_da: float
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.mz) or self.mz <= 0.0:
-            raise ValueError(f"前体 m/z 必须为正有限数，得到 {self.mz!r}")
-        if not math.isfinite(self.tolerance_da) or self.tolerance_da < 0.0:
-            raise ValueError(f"前体容差必须为非负有限数，得到 {self.tolerance_da!r}")
+        if self.mz <= 0.0 or not math.isfinite(self.mz):
+            raise ValueError(f"前体 mz 必须为正有限数，得到 {self.mz}")
+        if self.tolerance_da <= 0.0 or not math.isfinite(self.tolerance_da):
+            raise ValueError(f"前体容差 tolerance_da 必须为正有限数，得到 {self.tolerance_da}")
+
+    @property
+    def min_mz(self) -> float:
+        return self.mz - self.tolerance_da
+
+    @property
+    def max_mz(self) -> float:
+        return self.mz + self.tolerance_da
 
     def contains(self, mz: float | None) -> bool:
-        """判断给定 m/z 是否落在前体窗口内（闭区间）。"""
-        if mz is None or not math.isfinite(mz):
+        """判定目标前体 mz 是否落在窗口内。"""
+        if mz is None or math.isnan(mz):
             return False
-        return bool(self.mz - self.tolerance_da <= mz <= self.mz + self.tolerance_da)
+        return abs(mz - self.mz) <= self.tolerance_da
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +86,7 @@ class SpectrumMeta:
     charge: int | None
     ion_mode: IonMode
     source: SourceRef
-    raw_metadata: dict[str, str]
+    raw_metadata: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, eq=False)
@@ -98,6 +106,27 @@ class SpectrumPeaks:
         check_column("peak_id", self.peak_id, PEAK_ID_DTYPE)
         if not (self.mass.shape == self.intensity.shape == self.energy.shape == self.peak_id.shape):
             raise ValueError("SpectrumPeaks 的 mass, intensity, energy, peak_id 列长度必须一致")
+        if np.any(self.intensity < 0.0):
+            raise ValueError("SpectrumPeaks 峰强度 (intensity) 包含负数，违反非负前置条件")
+        if self.mass.shape[0] > 1 and not np.all(self.mass[:-1] <= self.mass[1:]):
+            raise ValueError("SpectrumPeaks 峰质量 (mass) 必须按升序排列")
+
+    @classmethod
+    def _create_unchecked(
+        cls,
+        mass: NDArray[np.float64],
+        intensity: NDArray[np.float64],
+        energy: NDArray[np.float64],
+        peak_id: NDArray[np.int64],
+        norm: float = 1.0,
+    ) -> SpectrumPeaks:
+        obj = object.__new__(cls)
+        object.__setattr__(obj, "mass", mass)
+        object.__setattr__(obj, "intensity", intensity)
+        object.__setattr__(obj, "energy", energy)
+        object.__setattr__(obj, "peak_id", peak_id)
+        object.__setattr__(obj, "norm", norm)
+        return obj
 
     @property
     def n_peaks(self) -> int:
@@ -152,3 +181,23 @@ def check_spectrum_offsets(
         raise ValueError(f"{name} 末项必须等于 {item_label} {n_items}，得到 {offsets[-1]}")
     if offsets.shape[0] > 1 and bool((np.diff(offsets) < 0).any()):
         raise ValueError(f"{name} 必须单调不减")
+
+
+def validate_query(query: SpectrumPeaks) -> None:
+    """校验查询谱的合法性与数学不变量前提。"""
+    if query.mass.size == 0:
+        return
+    if np.any(query.intensity < 0.0):
+        raise ValueError("查询谱峰强度包含负数，违反非负前置条件")
+    if query.mass.shape[0] > 1 and not np.all(query.mass[:-1] <= query.mass[1:]):
+        raise ValueError("查询谱峰质量 (mass) 必须按升序排列")
+    l2_sum = float(np.sum(query.intensity * query.intensity, dtype=np.float64))
+    l2_norm = math.sqrt(l2_sum) if l2_sum > 0.0 else 0.0
+    if l2_norm == 0.0:
+        raise ValueError("查询谱所有峰强度均为 0，无可匹配特征，无法参与相似度检索")
+    if abs(l2_norm - 1.0) > 1e-4:
+        raise ValueError(
+            f"查询谱必须经 L2 归一化 (||v||=1.0)，当前范数为 {l2_norm:.6f}。"
+            f"请先调用 preprocess_query(query) 进行预处理。"
+        )
+

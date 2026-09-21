@@ -26,7 +26,7 @@ from jetf.types import (
 
 _BEGIN_IONS = "BEGIN IONS"
 _END_IONS = "END IONS"
-_EXTERNAL_ID_KEYS = ("SPECTRUMID", "TITLE", "NAME")
+_EXTERNAL_ID_KEYS = ("SPECTRUM_ID", "SPECTRUMID", "TITLE", "NAME")
 _ION_MODE_VALUES = {"positive": IonMode.POSITIVE, "negative": IonMode.NEGATIVE}
 
 
@@ -114,8 +114,16 @@ def _concat_columns(chunks: list[NDArray[np.number]], dtype: np.dtype) -> NDArra
     return np.concatenate(chunks) if chunks else np.empty(0, dtype=dtype)
 
 
-def parse_mgf(path: str | Path) -> ParsedLibrary:
-    """解析 MGF 文件：合法记录进谱列表，非法记录隔离在 rejected。"""
+def parse_mgf(
+    path: str | Path,
+    max_records: int | None = None,
+    clean_config: Any | None = None,
+) -> ParsedLibrary:
+    """解析 MGF 文件：合法记录进谱列表，非法记录隔离在 rejected。
+
+    若指定 clean_config，则在流式解析时直接执行 matchms 工业级清洗，
+    避免在内存中积聚全量未清洗峰数组，大幅降低百万级谱库的物理内存峰值。
+    """
     source_path = str(path)
     file_path = Path(path)
     if not file_path.exists():
@@ -125,14 +133,13 @@ def parse_mgf(path: str | Path) -> ParsedLibrary:
     rejected: list[RejectedRecord] = []
     mass_chunks: list[NDArray[np.float64]] = []
     intensity_chunks: list[NDArray[np.float64]] = []
-    peak_id_chunks: list[NDArray[np.int64]] = []
     offsets = [0]
 
-    with open(source_path, "r", encoding="utf-8", errors="replace") as handle:
+    with open(source_path, "r", encoding="utf-8-sig", errors="replace") as handle:
         for record in _iter_records(handle):
             source = SourceRef(path=source_path, record_index=record.index)
             try:
-                meta, mass, intensity, peak_id = _parse_record(record, source)
+                meta, mass, intensity, _ = _parse_record(record, source)
             except _RecordRejected as exc:
                 rejected.append(
                     RejectedRecord(
@@ -143,19 +150,44 @@ def parse_mgf(path: str | Path) -> ParsedLibrary:
                     )
                 )
                 continue
+
+            if clean_config is not None:
+                from jetf.cleaning import clean_single_spectrum_record
+
+                res = clean_single_spectrum_record(meta, mass, intensity, config=clean_config)
+                if res is None:
+                    rejected.append(
+                        RejectedRecord(
+                            source=source,
+                            external_id=meta.external_id,
+                            reason=RejectReason.UNPARSEABLE,
+                            detail=f"经 matchms 预处理后谱图无效或峰数不足 ({clean_config.min_peaks})",
+                        )
+                    )
+                    continue
+                meta, mass, intensity = res
+
             spectra.append(meta)
             mass_chunks.append(mass)
             intensity_chunks.append(intensity)
-            peak_id_chunks.append(peak_id)
             offsets.append(offsets[-1] + int(mass.shape[0]))
+            if max_records is not None and len(spectra) >= max_records:
+                break
+
+    offsets_arr = np.array(offsets, dtype=INTERNAL_ID_DTYPE)
+    total_peaks = int(offsets_arr[-1]) if offsets_arr.size > 0 else 0
+    final_pid = np.empty(total_peaks, dtype=PEAK_ID_DTYPE)
+    for i in range(len(spectra)):
+        st, ed = int(offsets_arr[i]), int(offsets_arr[i + 1])
+        final_pid[st:ed] = np.arange(ed - st, dtype=PEAK_ID_DTYPE)
 
     return ParsedLibrary(
         source_path=source_path,
         spectra=tuple(spectra),
         mass=_concat_columns(mass_chunks, MASS_DTYPE),
         intensity=_concat_columns(intensity_chunks, INTENSITY_DTYPE),
-        peak_id=_concat_columns(peak_id_chunks, PEAK_ID_DTYPE),
-        spectrum_offsets=np.array(offsets, dtype=INTERNAL_ID_DTYPE),
+        peak_id=final_pid,
+        spectrum_offsets=offsets_arr,
         rejected=tuple(rejected),
     )
 
@@ -169,14 +201,14 @@ def _iter_records(lines: Iterable[str]) -> Iterator[_Record]:
     for raw_line in lines:
         text = raw_line.rstrip("\r\n")
         stripped = text.strip()
-        if stripped.startswith(_BEGIN_IONS):
+        if stripped == _BEGIN_IONS:
             if open_index is not None:
                 yield _Record(open_index, tuple(header), tuple(peaks), False)
             open_index = counter
             counter += 1
             header, peaks = [], []
             continue
-        if stripped.startswith(_END_IONS):
+        if stripped == _END_IONS:
             if open_index is None:
                 continue
             yield _Record(open_index, tuple(header), tuple(peaks), True)
@@ -205,7 +237,13 @@ def _parse_record(
 ) -> tuple[SpectrumMeta, NDArray[np.float64], NDArray[np.float64], NDArray[np.int64]]:
     raw_metadata, fields = _header_fields(record)
     external_id = _external_id(fields)
-    precursor_mz = _parse_precursor_mz(fields.get("PEPMASS"))
+    raw_prec = (
+        fields.get("PEPMASS")
+        or fields.get("PRECURSOR_MZ")
+        or fields.get("PRECURSORMZ")
+        or fields.get("PARENT_MASS")
+    )
+    precursor_mz = _parse_precursor_mz(raw_prec)
     precursor_charge = _parse_charge(fields.get("CHARGE"))
     if not record.terminated:
         raise _RecordRejected(RejectReason.UNPARSEABLE, "记录缺少 END IONS")
@@ -254,9 +292,7 @@ def _external_id(fields: dict[str, str]) -> str:
 
 
 def _parse_ion_mode(raw: str | None) -> IonMode:
-    if raw is None:
-        return IonMode.UNKNOWN
-    return _ION_MODE_VALUES.get(raw.strip().lower(), IonMode.UNKNOWN)
+    return IonMode.from_str(raw)
 
 
 def _parse_precursor_mz(raw: str | None) -> float | None:
@@ -266,9 +302,9 @@ def _parse_precursor_mz(raw: str | None) -> float | None:
     try:
         value = float(token)
     except ValueError as exc:
-        raise _RecordRejected(RejectReason.UNPARSEABLE, f"PEPMASS 无法解析: {raw!r}") from exc
+        raise _RecordRejected(RejectReason.UNPARSEABLE, f"前体质量无法解析: {raw!r}") from exc
     if not np.isfinite(value):
-        raise _RecordRejected(RejectReason.UNPARSEABLE, f"PEPMASS 非有限: {raw!r}")
+        raise _RecordRejected(RejectReason.UNPARSEABLE, f"前体质量非有限: {raw!r}")
     return value
 
 
@@ -276,15 +312,27 @@ def _parse_charge(raw: str | None) -> int | None:
     if raw is None or not raw.strip():
         return None
     token = raw.strip()
+    # 支持多电荷表达（如 "2+ and 3+", "2+,3+", "2+ / 3+"）：提取首个子串
+    for sep in (" and ", ",", "/", ";"):
+        if sep in token:
+            token = token.split(sep, 1)[0].strip()
+            break
+    parts = token.split()
+    if parts:
+        token = parts[0]
+
     sign = 1
-    if token[-1] in "+-":
+    if token and token[-1] in "+-":
         sign = -1 if token[-1] == "-" else 1
         token = token[:-1]
+    elif token and token[0] in "+-":
+        sign = -1 if token[0] == "-" else 1
+        token = token[1:]
     try:
         charge = int(token) * sign
     except ValueError as exc:
         raise _RecordRejected(RejectReason.UNPARSEABLE, f"CHARGE 无法解析: {raw!r}") from exc
-    return None if charge == 0 else charge
+    return charge
 
 
 def _parse_peaks(record: _Record) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.int64]]:

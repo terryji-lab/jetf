@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+
+
+def sah_node_cost(
+    cells: set[int],
+    amps: dict[int, float],
+) -> float:
+    """计算单个节点包络的 SAH 代价：|Z(B)| * sum_{h in Z(B)} m_h(B)。"""
+    if not cells:
+        return 0.0
+    return float(len(cells)) * float(sum(amps.values()))
 
 
 def sah_cost(
@@ -25,13 +35,14 @@ def sah_cost(
             if c not in max_amps or a > max_amps[c]:
                 max_amps[c] = a
 
-    return float(len(union_cells)) * float(sum(max_amps.values()))
+    return sah_node_cost(union_cells, max_amps)
+
 
 
 def split_sah_bvh(
     spectrum_indices: Sequence[int],
-    spec_cells: Sequence[set[int]],
-    spec_amps: Sequence[dict[int, float]],
+    spec_cells: Sequence[set[int]] | Mapping[int, set[int]],
+    spec_amps: Sequence[dict[int, float]] | Mapping[int, dict[int, float]],
     target_leaf_size: int = 16,
     max_candidate_axes: int = 10,
 ) -> list[list[int]]:
@@ -65,10 +76,20 @@ def split_sah_bvh(
     best_split: tuple[list[int], list[int]] | None = None
     min_total_cost = float("inf")
     half = n // 2
-    min_leaf = max(4, target_leaf_size // 4)
+    min_leaf = max(8, target_leaf_size // 2)
 
-    # 3. 在候选轴上寻找最小 SAH Cost 的平衡切分
+    # 3. 在候选轴上寻找最小 SAH Cost 的平衡切分 (对齐设计规格 [half-4, half, half+4])
     if candidate_axes:
+        candidate_positions = []
+        for delta in (0, -4, 4):
+            pos = half + delta
+            if min_leaf <= pos <= n - min_leaf and pos not in candidate_positions:
+                candidate_positions.append(pos)
+        if not candidate_positions and 4 <= half <= n - 4:
+            candidate_positions = [half]
+
+        pos_set = set(candidate_positions)
+
         for axis_cell in candidate_axes:
             # 按在该 cell 的峰强度升序排序，并列按原谱序号升序破并列（保证确定性）
             sorted_indices = sorted(
@@ -76,31 +97,43 @@ def split_sah_bvh(
                 key=lambda idx: (spec_amps[idx].get(axis_cell, 0.0), idx),
             )
 
-            # 考察平衡切分位置
-            candidate_positions = [half]
-            for delta in [2, 4, 6]:
-                if half - delta >= min_leaf:
-                    candidate_positions.append(half - delta)
-                if half + delta <= n - min_leaf:
-                    candidate_positions.append(half + delta)
+            # 前缀扫描计算前缀代价
+            prefix_cells: set[int] = set()
+            prefix_amps: dict[int, float] = {}
+            prefix_cost: dict[int, float] = {}
+            for i, idx in enumerate(sorted_indices):
+                prefix_cells.update(spec_cells[idx])
+                for c, a in spec_amps[idx].items():
+                    if c not in prefix_amps or a > prefix_amps[c]:
+                        prefix_amps[c] = a
+                split_len = i + 1
+                if split_len in pos_set:
+                    prefix_cost[split_len] = sah_node_cost(prefix_cells, prefix_amps)
 
+            # 后缀扫描计算后缀代价
+            suffix_cells: set[int] = set()
+            suffix_amps: dict[int, float] = {}
+            suffix_cost: dict[int, float] = {}
+            for i in range(n - 1, -1, -1):
+                idx = sorted_indices[i]
+                suffix_cells.update(spec_cells[idx])
+                for c, a in spec_amps[idx].items():
+                    if c not in suffix_amps or a > suffix_amps[c]:
+                        suffix_amps[c] = a
+                split_len = i
+                if split_len in pos_set:
+                    suffix_cost[split_len] = sah_node_cost(suffix_cells, suffix_amps)
+
+
+            # 评估候选切分位置
             for split_pos in candidate_positions:
-                left_group = sorted_indices[:split_pos]
-                right_group = sorted_indices[split_pos:]
-
-                c_left = sah_cost(
-                    [spec_cells[i] for i in left_group],
-                    [spec_amps[i] for i in left_group],
-                )
-                c_right = sah_cost(
-                    [spec_cells[i] for i in right_group],
-                    [spec_amps[i] for i in right_group],
-                )
+                c_left = prefix_cost.get(split_pos, float("inf"))
+                c_right = suffix_cost.get(split_pos, float("inf"))
                 total_cost = c_left + c_right
 
                 if total_cost < min_total_cost:
                     min_total_cost = total_cost
-                    best_split = (left_group, right_group)
+                    best_split = (sorted_indices[:split_pos], sorted_indices[split_pos:])
 
     # 4. 兜底处理：若无有效候选轴或无法产生更优划分，按原顺序直接均分
     if best_split is None:

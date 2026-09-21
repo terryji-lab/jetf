@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from jetf.bounds import NodeEnvelope, QueryContext, build_query_context, peak_bound
+__version__ = "0.1.0"
+
+from jetf.bounds import NodeEnvelope, QueryContext, batch_root_bounds, build_query_context, peak_bound
 from jetf.builder import build_forest_index
 from jetf.bvh_sah import sah_cost, split_sah_bvh
 from jetf.exhaustive import search_exhaustive
 from jetf.search import search_forest
+from jetf.cleaning import (
+    DEFAULT_CLEAN_CONFIG,
+    MatchmsCleanConfig,
+    clean_parsed_library,
+    clean_spectrum_with_matchms,
+)
 from jetf.mgf import ParsedLibrary, RejectReason, RejectedRecord, parse_mgf
 from jetf.preprocessing import (
     CORRECTNESS_V1,
@@ -15,7 +23,7 @@ from jetf.preprocessing import (
     preprocess_library,
     preprocess_query,
 )
-from jetf.query import IonModePolicy, PrecursorWindow, QueryConfig, SearchMode, is_eligible
+from jetf.query import IonModePolicy, QueryConfig, SearchMode, is_eligible
 from jetf.results import SearchHit, SearchOutcome, SearchStats
 from jetf.scoring import (
     SCORER_VERSIONED_ID,
@@ -44,13 +52,12 @@ from jetf.types import (
     MASS_DTYPE,
     PEAK_ID_DTYPE,
     IonMode,
+    PrecursorWindow,
     SourceRef,
     Spectrum,
     SpectrumMeta,
     SpectrumPeaks,
 )
-
-__version__ = "0.1.0"
 
 __all__ = [
     "__version__",
@@ -73,6 +80,10 @@ __all__ = [
     "load_forest_snapshot",
     "parse_mgf",
     "ParsedLibrary",
+    "MatchmsCleanConfig",
+    "DEFAULT_CLEAN_CONFIG",
+    "clean_parsed_library",
+    "clean_spectrum_with_matchms",
     "RejectedRecord",
     "RejectReason",
     "preprocess_library",
@@ -87,7 +98,6 @@ __all__ = [
     "QueryConfig",
     "SearchMode",
     "IonModePolicy",
-    "PrecursorWindow",
     "is_eligible",
     "SearchHit",
     "SearchOutcome",
@@ -96,7 +106,9 @@ __all__ = [
     "QueryContext",
     "build_query_context",
     "peak_bound",
+    "batch_root_bounds",
     "IonMode",
+    "PrecursorWindow",
     "SourceRef",
     "SpectrumMeta",
     "SpectrumPeaks",

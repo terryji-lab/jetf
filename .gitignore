@@ -33,5 +33,7 @@ htmlcov/
 # IDE & OS
 .vscode/
 .idea/
+.zcode/
+.zcodeignore
 .DS_Store
 Thumbs.db

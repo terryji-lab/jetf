@@ -15,6 +15,7 @@ from jetf.types import (
     MASS_DTYPE,
     PEAK_ID_DTYPE,
     IonMode,
+    SpectrumMeta,
     SpectrumPeaks,
     check_column,
 )
@@ -163,7 +164,6 @@ class ForestNodes:
     id_start: NDArray[np.int64]
     id_end: NDArray[np.int64]
     tree_id: NDArray[np.int64]
-    envelope_offsets: NDArray[np.int64]  # 长度 n_nodes + 1
 
     def __post_init__(self) -> None:
         n_nodes = self.is_leaf.shape[0]
@@ -171,12 +171,9 @@ class ForestNodes:
         check_column("id_start", self.id_start, INTERNAL_ID_DTYPE)
         check_column("id_end", self.id_end, INTERNAL_ID_DTYPE)
         check_column("tree_id", self.tree_id, INTERNAL_ID_DTYPE)
-        check_column("envelope_offsets", self.envelope_offsets, INTERNAL_ID_DTYPE)
 
         if self.member_count.shape[0] != n_nodes:
             raise ValueError("ForestNodes 列长度不匹配")
-        if self.envelope_offsets.shape[0] != n_nodes + 1:
-            raise ValueError("ForestNodes envelope_offsets 长度必须为 n_nodes + 1")
 
     @property
     def n_nodes(self) -> int:
@@ -191,13 +188,11 @@ class ForestEnvelopes:
     node_envelope_offsets: NDArray[np.int64]
     cell_index: NDArray[np.int64]
     max_peak_amplitude: NDArray[np.float64]
-    max_cell_energy: NDArray[np.float64]
 
     def __post_init__(self) -> None:
         check_column("node_envelope_offsets", self.node_envelope_offsets, INTERNAL_ID_DTYPE)
         check_column("cell_index", self.cell_index, INTERNAL_ID_DTYPE)
         check_column("max_peak_amplitude", self.max_peak_amplitude, ENERGY_DTYPE)
-        check_column("max_cell_energy", self.max_cell_energy, ENERGY_DTYPE)
 
     @property
     def n_nodes(self) -> int:
@@ -210,11 +205,10 @@ class ForestEnvelopes:
 
     def envelope_of(self, node_id: int) -> NodeEnvelope:
         start, stop = self.span(node_id)
-        return NodeEnvelope(
+        return NodeEnvelope._create_unchecked(
             grid_da=self.grid_da,
             cell_index=self.cell_index[start:stop],
             max_peak_amplitude=self.max_peak_amplitude[start:stop],
-            max_cell_energy=self.max_cell_energy[start:stop],
         )
 
 
@@ -242,9 +236,11 @@ class ForestPostings:
         return int(self.spectrum_offsets.shape[0]) - 1
 
     def spectrum_at(self, internal_id: int) -> SpectrumPeaks:
+        if internal_id < 0 or internal_id >= self.n_spectra:
+            raise IndexError(f"internal_id {internal_id} 超出合法区间 [0, {self.n_spectra})")
         start = int(self.spectrum_offsets[internal_id])
         stop = int(self.spectrum_offsets[internal_id + 1])
-        return SpectrumPeaks(
+        return SpectrumPeaks._create_unchecked(
             mass=self.mass[start:stop],
             intensity=self.intensity[start:stop],
             energy=self.energy[start:stop],
@@ -267,6 +263,8 @@ class ForestIndex:
     internal_to_row: NDArray[np.int64]
     row_to_internal: NDArray[np.int64]
     zero_energy_members: ZeroEnergyMembers
+    library_fingerprint: str = ""
+    spectra: tuple[SpectrumMeta, ...] | None = None
 
     @property
     def n_trees(self) -> int:
@@ -291,6 +289,13 @@ def check_forest_index(forest: ForestIndex, library: PreprocessedLibrary) -> Non
         raise ValueError(
             f"森林总谱数不一致: 索引声明 {forest.n_spectra}, 库实际 {library.n_spectra}"
         )
+
+    if abs(forest.spec.summary_grid_da - forest.envelopes.grid_da) > 1e-9:
+        raise ValueError(
+            f"森林索引网格不一致: spec.summary_grid_da={forest.spec.summary_grid_da} Da, "
+            f"envelopes.grid_da={forest.envelopes.grid_da} Da"
+        )
+
 
     # 1. 验证零分侧车与有能量谱总和
     n_zero = forest.zero_energy_members.n_members

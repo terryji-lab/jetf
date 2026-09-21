@@ -1,0 +1,96 @@
+{
+  "report_title": "JET-Forest vs matchms Benchmark Report",
+  "metadata": {
+    "timestamp": "2026-09-21T05:15:08.596142+00:00",
+    "python_version": "3.10.6",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "machine": "AMD64",
+    "dependencies": {
+      "jetf": "0.1.0",
+      "matchms": "0.33.1",
+      "numpy": "2.2.6",
+      "numba": "0.67.0",
+      "scipy": "1.15.3",
+      "pandas": "2.3.3",
+      "tabulate": "0.10.0"
+    },
+    "config": {
+      "mode": "throughput",
+      "library_size": 820482,
+      "n_queries": 30,
+      "n_pairs": 0,
+      "tolerance": 0.02,
+      "tolerance_da": 0.02,
+      "seed": 2026,
+      "snapshot": "cleaned_forest.npz",
+      "skip_matchms": true,
+      "source_type": "snapshot"
+    }
+  },
+  "results": {
+    "retrieval_consistency": [],
+    "retrieval_throughput": [
+      {
+        "mode_name": "开放检索 Top-10 (全库无限制)",
+        "n_queries": 30,
+        "library_size": 820482,
+        "jetf_qps": 10.3289039783257,
+        "matchms_qps": 0.0,
+        "jetf_latency_mean_ms": 96.8156933299421,
+        "jetf_latency_p50_ms": 48.046100011561066,
+        "jetf_latency_p95_ms": 299.7057650267378,
+        "jetf_latency_p99_ms": 578.1628479994837,
+        "matchms_latency_mean_ms": 0.0,
+        "matchms_latency_p50_ms": 0.0,
+        "matchms_latency_p95_ms": 0.0,
+        "matchms_latency_p99_ms": 0.0,
+        "speedup": NaN,
+        "avg_scored_ratio": 0.00043055992290710416,
+        "avg_pruned_ratio": 0.9995694400770929,
+        "jetf_latency_std_ms": 134.57729694168296,
+        "matchms_latency_std_ms": 0.0
+      },
+      {
+        "mode_name": "开放检索 Top-5 (全库无限制)",
+        "n_queries": 30,
+        "library_size": 820482,
+        "jetf_qps": 13.693754785461724,
+        "matchms_qps": 0.0,
+        "jetf_latency_mean_ms": 73.02598999813199,
+        "jetf_latency_p50_ms": 36.34004999184981,
+        "jetf_latency_p95_ms": 248.0240049771963,
+        "jetf_latency_p99_ms": 428.7290849792773,
+        "matchms_latency_mean_ms": 0.0,
+        "matchms_latency_p50_ms": 0.0,
+        "matchms_latency_p95_ms": 0.0,
+        "matchms_latency_p99_ms": 0.0,
+        "speedup": NaN,
+        "avg_scored_ratio": 0.00038899898677444074,
+        "avg_pruned_ratio": 0.9996110010132255,
+        "jetf_latency_std_ms": 102.71596739909408,
+        "matchms_latency_std_ms": 0.0
+      },
+      {
+        "mode_name": "开放检索 Threshold >= 0.50",
+        "n_queries": 30,
+        "library_size": 820482,
+        "jetf_qps": 4.643483333184079,
+        "matchms_qps": 0.0,
+        "jetf_latency_mean_ms": 215.35556999927698,
+        "jetf_latency_p50_ms": 120.29774999246001,
+        "jetf_latency_p95_ms": 710.0138299923854,
+        "jetf_latency_p99_ms": 1162.7361060294793,
+        "matchms_latency_mean_ms": 0.0,
+        "matchms_latency_p50_ms": 0.0,
+        "matchms_latency_p95_ms": 0.0,
+        "matchms_latency_p99_ms": 0.0,
+        "speedup": NaN,
+        "avg_scored_ratio": 0.0013482318929604793,
+        "avg_pruned_ratio": 0.9986517681070395,
+        "jetf_latency_std_ms": 280.8462856600006,
+        "matchms_latency_std_ms": 0.0
+      }
+    ]
+  }
+}

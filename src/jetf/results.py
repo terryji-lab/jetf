@@ -12,7 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from jetf.preprocessing import PreprocessedLibrary
-from jetf.query import QueryConfig, SearchMode, ion_mode_passes
+from jetf.query import QueryConfig, SearchMode, ion_mode_passes, is_eligible
 from jetf.scoring import SCORER_VERSIONED_ID
 from jetf.structure import ION_MODES_BY_CODE
 from jetf.types import INTERNAL_ID_DTYPE, MASS_DTYPE, check_column
@@ -55,7 +55,7 @@ class ResultSet:
     def theta(self) -> float:
         """动态门槛 theta：用于安全剪枝。"""
         if self._mode is not SearchMode.TOP_K:
-            return self._threshold
+            return self._threshold - 1e-12
         if self._k == 0 or len(self._heap) < self._k:
             return -np.inf
         return self._heap[0].hit.score
@@ -63,7 +63,7 @@ class ResultSet:
     def update(self, hit: SearchHit) -> None:
         """更新结果集。"""
         if self._mode is not SearchMode.TOP_K:
-            if hit.score >= self._threshold:
+            if hit.score >= self._threshold - 1e-12:
                 self._hits.append(hit)
             return
         item = _HeapItem(key=hit_ranking_key(hit), hit=hit)
@@ -102,8 +102,6 @@ class SearchStats:
     pruned_by_layer: Mapping[str, int]
     bound_eval_time_ms: float = 0.0
     exact_eval_time_ms: float = 0.0
-    seed_count: int = 0
-    skipped_block_intervals: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
         if isinstance(self.pruned_by_layer, dict):
@@ -135,9 +133,18 @@ def elapsed_ms(started: float) -> float:
     return (time.perf_counter() - started) * 1000.0
 
 
-def search_versions(library: PreprocessedLibrary, config: QueryConfig) -> dict[str, str]:
+def search_versions(
+    library: PreprocessedLibrary | None,
+    config: QueryConfig,
+    default_version: str = "correctness_v1/1",
+) -> dict[str, str]:
+    prep_ver = (
+        library.spec.versioned_id
+        if library is not None and hasattr(library, "spec")
+        else default_version
+    )
     return {
-        "preprocess_version": library.spec.versioned_id,
+        "preprocess_version": prep_ver,
         "scorer_version": SCORER_VERSIONED_ID,
         "snapshot_id": config.snapshot_id,
     }
@@ -166,45 +173,47 @@ def needs_zero_supplement(results: ResultSet, config: QueryConfig) -> bool:
 
 def eligible_mask(
     ion_mode: NDArray[np.int8],
-    precursor_mz: NDArray[np.float64],
     config: QueryConfig,
 ) -> NDArray[np.bool_]:
-    """批量元数据过滤掩码。"""
+    """批量元数据过滤掩码（离子模式）。"""
     accepted = [
         code
         for code, ion_mode_value in enumerate(ION_MODES_BY_CODE)
         if ion_mode_passes(config.ion_mode, config.ion_mode_policy, ion_mode_value)
     ]
-    mask = np.isin(ion_mode, accepted)
-    window = config.precursor_window
-    if window is None:
-        return mask
-    lower = window.mz - window.tolerance_da
-    upper = window.mz + window.tolerance_da
-    return mask & (precursor_mz >= lower) & (precursor_mz <= upper)
+    return np.isin(ion_mode, accepted)
 
 
 def supplement_zero_score(
     results: ResultSet,
-    library: PreprocessedLibrary,
+    library_or_spectra: PreprocessedLibrary | Sequence[SpectrumMeta],
     config: QueryConfig,
     candidates: ZeroScoreCandidates,
     scored: NDArray[np.bool_],
 ) -> int:
     """为满足条件的零能量/零匹配谱补入 0 分命中。"""
-    mask = eligible_mask(candidates.ion_mode, candidates.precursor_mz, config)
-    excluded = config.exclude_spectrum_id
+    spectra = (
+        library_or_spectra.spectra
+        if hasattr(library_or_spectra, "spectra")
+        else library_or_spectra
+    )
+    mask = eligible_mask(candidates.ion_mode, config)
+    if config.precursor_window is not None:
+        w_min = config.precursor_window.min_mz
+        w_max = config.precursor_window.max_mz
+        prec_mask = (candidates.precursor_mz >= w_min) & (candidates.precursor_mz <= w_max)
+        mask = mask & prec_mask
     added = 0
     for raw in candidates.member[mask].tolist():
         row = int(raw)
         if scored[row]:
             continue
-        ext_id = library.spectra[row].external_id
-        if excluded is not None and ext_id == excluded:
+        meta = spectra[row]
+        if not is_eligible(config, meta):
             continue
         results.update(
             SearchHit(
-                external_id=ext_id,
+                external_id=meta.external_id,
                 spectrum_index=row,
                 score=0.0,
                 n_matched=0,
