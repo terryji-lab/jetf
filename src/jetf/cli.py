@@ -149,6 +149,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         else:
             check_matchms_available()
 
+        if getattr(args, "clean", True):
+            print(f"[*] 数据清洗配置: 已启用 (--clean, 检索库与查询谱均符合 matchms 工业级清洗规范)")
+        else:
+            print("[*] 数据清洗配置: 未启用 (--no-clean)")
+
         retrieval_tp_list = []
         pairwise_tp = None
         pairwise_cons = None
@@ -232,6 +237,9 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             "seed": seed,
             "snapshot": str(snap_path),
             "skip_matchms": skip_matchms,
+            "clean": bool(getattr(args, "clean", True)),
+            "clean_max_peaks": args.clean_max_peaks if getattr(args, "clean", True) else None,
+            "clean_min_rel": args.clean_min_rel if getattr(args, "clean", True) else None,
             "source_type": "snapshot",
         }
 
@@ -589,7 +597,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_bench.add_argument("mgf", nargs="?", type=str, default=None, help="参考库 MGF 文件路径 (可选位置参数，与 --mgf 等价)")
     p_bench.add_argument("--mgf", dest="mgf_opt", type=str, default=None, help="参考库 MGF 文件路径 (可选选项参数，与位置参数等价)")
     p_bench.add_argument("--library-size", type=int, default=2000, help="测试参考库容量大小 (默认 2000)")
-    p_bench.add_argument("--n-queries", type=int, default=30, help="抽样查询谱数量 (默认 30)")
+    p_bench.add_argument(
+        "-q",
+        "--n-queries",
+        "--queries",
+        "--query",
+        dest="n_queries",
+        type=int,
+        default=30,
+        help="抽样查询谱数量 (默认 30，支持 --n-queries, --queries, --query, -q)",
+    )
     p_bench.add_argument("--n-pairs", type=int, default=1000, help="算子微基准测试谱对数 (默认 1000)")
     p_bench.add_argument("--tolerance", type=float, default=0.02, help="匹配容差 Da (默认 0.02)")
     p_bench.add_argument(

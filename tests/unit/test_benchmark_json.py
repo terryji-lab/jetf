@@ -146,6 +146,16 @@ def test_cli_benchmark_json_and_csv_argument(capsys):
     assert exc_info.value.code != 0
 
 
+def test_cli_benchmark_query_argument_aliases():
+    """验证 benchmark 子命令对 -q, --queries, --query, --n-queries 别名的完备支持。"""
+    from jetf.cli import build_parser
+
+    parser = build_parser()
+    for flag in ["-q", "--n-queries", "--queries", "--query"]:
+        args = parser.parse_args(["benchmark", flag, "123"])
+        assert args.n_queries == 123
+
+
 def test_markdown_report_removed():
     # Verify generate_full_markdown_report is no longer exposed
     import jetf.benchmarks

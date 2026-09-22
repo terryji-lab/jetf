@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-94%20passed%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-95%20passed%20(100%25)-brightgreen.svg)]()
 
 **JET-Forest**（JETF）是一个独立、高吞吐、零漏检（Zero False Dismissals）的串联质谱（MS/MS）相似度检索引擎。它实现了**前体自适应浅层包络森林与 BVH-SAH 紧致索引**（Precursor-Binned Envelope Forest with SAH Leaf Partitioning）算法体系。
 
@@ -192,13 +192,21 @@ jetf benchmark --snapshot all_gnps_forest.npz --mode throughput --concurrency 4 
 | **开放检索 Top-5 (全库无限制)** | 1,991 | **159.0** | 28.3 | 6.29±4.08 [5.58] ms | 35.36±12.12 [37.44] ms | **5.6x** | 99.08% |
 | **开放检索 Threshold >= 0.50** | 1,991 | **303.2** | 28.6 | 3.30±4.13 [1.82] ms | 34.94±11.68 [36.75] ms | **10.6x** | 99.76% |
 
-#### 2.2 200 万谱全量 GNPS 库宏观检索吞吐量 (2,003,310 谱脱机秒级加载，二次性能跃升版)
+#### 2.2 200 万谱全量 GNPS 库宏观检索吞吐量与并发性能 (2,003,310 谱脱机秒级加载，100 张谱大样本评测)
 
-| 检索场景 | 库容量 ($N$) | JETF 单核 QPS | JETF 时延 (Mean±Std [Med] ms) | P95 时延 (ms) | 包络剪枝率 |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **开放检索 Top-10 (全库无限制)** | 2,003,310 | **7.7** | 129.30±108.44 [**92.93**] ms | 348.74 ms | **99.98%** |
-| **开放检索 Top-5 (全库无限制)** | 2,003,310 | **9.9** | 101.21±78.14 [**81.20**] ms | 222.81 ms | **99.98%** |
-| **开放检索 Threshold >= 0.50** | 2,003,310 | **1.8** | 560.03±610.50 [**355.65**] ms | 1878.01 ms | **99.74%** |
+##### 单谱低延迟模式 (单查询独占多核，concurrency=1)
+| 检索场景 | 库容量 ($N$) | JETF QPS | JETF 时延 (Mean±Std [Med] ms) | P95 时延 (ms) | P99 时延 (ms) | 包络剪枝率 |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **开放检索 Top-10 (全库无限制)** | 2,003,310 | **10.2** | 97.91±137.80 [**51.22**] ms | 370.47 ms | 675.81 ms | **99.98%** |
+| **开放检索 Top-5 (全库无限制)** | 2,003,310 | **11.7** | 85.61±113.56 [**48.63**] ms | 331.32 ms | 635.85 ms | **99.98%** |
+| **开放检索 Threshold >= 0.50** | 2,003,310 | **2.6** | 388.67±522.91 [**161.31**] ms | 1216.69 ms | 2461.13 ms | **99.76%** |
+
+##### 高并发批量批处理模式 (自适应解耦，concurrency=16)
+| 检索场景 | 库容量 ($N$) | JETF QPS | JETF 批处理单谱时延 (Mean [Med] ms) | P95 时延 (ms) | P99 时延 (ms) | 包络剪枝率 |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **开放检索 Top-10 (全库无限制)** | 2,003,310 | **8.8** | 1446.52 [**484.78**] ms | 7408.05 ms | 9605.59 ms | **99.98%** |
+| **开放检索 Top-5 (全库无限制)** | 2,003,310 | **10.6** | 1174.44 [**381.24**] ms | 6377.66 ms | 7801.50 ms | **99.98%** |
+| **开放检索 Threshold >= 0.50** | 2,003,310 | **1.6** | 8896.20 [**3915.04**] ms | 32453.53 ms | 48262.86 ms | **99.76%** |
 
 > **基准复现与报告生成**：可通过 CLI 评测套件随时重跑并导出最新结构化 JSON 与 CSV 结果：
 > ```bash
@@ -219,7 +227,7 @@ jetf benchmark --snapshot all_gnps_forest.npz --mode throughput --concurrency 4 
 uv run pytest tests/
 ```
 
-- **全量测试 100% 通过 (94/94 passed)**：
+- **全量测试 100% 通过 (95/95 passed)**：
   - `tests/unit/test_adaptive_concurrency.py`：自适应多线程并发解耦校验（`adaptive_numba_threads` 动态调整与严格现场恢复、`search_forest_batch` 批量并发与串行逐项逐位完全一致性）。
   - `tests/unit/test_accelerated_search.py`：二次加速计划深度校验（JIT 叶上界单调二分与 AABB 剪枝数值等价性、树根零上界短路、Top-K 动态门槛 $\theta$ 预植入安全保真性、多线程并发检索结果逐项吻合）。
   - `tests/unit/test_review_p0_p1_fixes.py`：量化偏置极限距离边缘用例零漏检验证（$m_{lib}=100.0-10^{-13}, m_q=99.98-10^{-13}$）、全 0 强度谱建库列等长校验与微块对齐、阈值检索临界分一致性 $[threshold - 10^{-12}, threshold - 10^{-13}]$ 及 0 峰空谱快速短路。
