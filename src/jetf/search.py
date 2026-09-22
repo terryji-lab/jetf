@@ -398,18 +398,21 @@ def search_forest(
 def search_forest_batch(
     queries: Sequence[SpectrumPeaks],
     forest: ForestIndex,
-    library: PreprocessedLibrary | None = None,
+    library: PreprocessedLibrary | QueryConfig | Sequence[QueryConfig] | None = None,
     config: QueryConfig | Sequence[QueryConfig] | None = None,
     concurrency: int = 1,
+    uind: bool = True,
 ) -> list[SearchOutcome]:
     """多查询批量检索，内置自适应多线程并发控制与线程安全隔离。
 
     参数:
         queries: 查询谱列表 (SpectrumPeaks)。
         forest: 森林索引 (ForestIndex)。
-        library: 预处理参考库 (PreprocessedLibrary)，若快照已自包含元数据可为 None。
+        library: 预处理参考库 (PreprocessedLibrary)，若快照已自包含元数据可为 None；
+                 若作为第 3 位置参数传入 QueryConfig 或其序列，将自动转移为 config。
         config: 单个统一 QueryConfig，或与 queries 长度相同的 QueryConfig 序列。
-        concurrency: 并发工作线程数 (默认 1 为串行)。
+        concurrency: 并发工作线程数 (默认 1 为串行，<= 1 时为串行，> queries 数量时自动收敛)。
+        uind: 是否开启单谱 Uind 上界过滤 (默认 True)。
 
     返回:
         按输入 queries 顺序严格排列的 SearchOutcome 列表。
@@ -418,12 +421,20 @@ def search_forest_batch(
     if n_queries == 0:
         return []
 
+    if isinstance(library, QueryConfig):
+        config = library
+        library = None
+    elif isinstance(library, Sequence) and not isinstance(library, (str, bytes)):
+        if len(library) == 0 or isinstance(library[0], QueryConfig):
+            config = library
+            library = None
+
     if config is None:
         raise ValueError("必须提供 config 参数 (QueryConfig 或其序列)")
 
     if isinstance(config, QueryConfig):
         cfg_list = [config] * n_queries
-    elif isinstance(config, Sequence):
+    elif isinstance(config, Sequence) and not isinstance(config, (str, bytes)):
         if len(config) != n_queries:
             raise ValueError(
                 f"config 序列长度 ({len(config)}) 与 queries 长度 ({n_queries}) 不匹配"
@@ -437,7 +448,7 @@ def search_forest_batch(
     with adaptive_numba_threads(effective_concurrency) as target_inner:
         if effective_concurrency <= 1:
             return [
-                search_forest(queries[i], forest, library, cfg_list[i])
+                search_forest(queries[i], forest, library, cfg_list[i], uind=uind)
                 for i in range(n_queries)
             ]
         else:
@@ -450,7 +461,7 @@ def search_forest_batch(
                         pass
 
             def _worker(idx: int) -> SearchOutcome:
-                return search_forest(queries[idx], forest, library, cfg_list[idx])
+                return search_forest(queries[idx], forest, library, cfg_list[idx], uind=uind)
 
             with ThreadPoolExecutor(
                 max_workers=effective_concurrency,

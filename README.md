@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-90%20passed%20(100%25)-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-94%20passed%20(100%25)-brightgreen.svg)]()
 
 **JET-Forest**（JETF）是一个独立、高吞吐、零漏检（Zero False Dismissals）的串联质谱（MS/MS）相似度检索引擎。它实现了**前体自适应浅层包络森林与 BVH-SAH 紧致索引**（Precursor-Binned Envelope Forest with SAH Leaf Partitioning）算法体系。
 
@@ -219,7 +219,7 @@ jetf benchmark --snapshot all_gnps_forest.npz --mode throughput --concurrency 4 
 uv run pytest tests/
 ```
 
-- **全量测试 100% 通过 (90/90 passed)**：
+- **全量测试 100% 通过 (94/94 passed)**：
   - `tests/unit/test_adaptive_concurrency.py`：自适应多线程并发解耦校验（`adaptive_numba_threads` 动态调整与严格现场恢复、`search_forest_batch` 批量并发与串行逐项逐位完全一致性）。
   - `tests/unit/test_accelerated_search.py`：二次加速计划深度校验（JIT 叶上界单调二分与 AABB 剪枝数值等价性、树根零上界短路、Top-K 动态门槛 $\theta$ 预植入安全保真性、多线程并发检索结果逐项吻合）。
   - `tests/unit/test_review_p0_p1_fixes.py`：量化偏置极限距离边缘用例零漏检验证（$m_{lib}=100.0-10^{-13}, m_q=99.98-10^{-13}$）、全 0 强度谱建库列等长校验与微块对齐、阈值检索临界分一致性 $[threshold - 10^{-12}, threshold - 10^{-13}]$ 及 0 峰空谱快速短路。

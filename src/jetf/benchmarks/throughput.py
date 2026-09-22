@@ -185,9 +185,11 @@ def benchmark_retrieval_throughput(
     jetf_times_ms: list[float] = []
     scored_counts: list[int] = []
 
+    effective_concurrency = max(1, min(concurrency, len(parsed_queries)))
+
     t_wall_start = time.perf_counter()
-    with adaptive_numba_threads(concurrency) as target_inner:
-        if concurrency <= 1:
+    with adaptive_numba_threads(effective_concurrency) as target_inner:
+        if effective_concurrency <= 1:
             for _, q, q_cfg in parsed_queries:
                 t0 = time.perf_counter()
                 outcome = search_forest(q, forest, library, q_cfg)
@@ -213,7 +215,7 @@ def benchmark_retrieval_throughput(
                 return elapsed, outcome.stats.n_scored
 
             with ThreadPoolExecutor(
-                max_workers=concurrency,
+                max_workers=effective_concurrency,
                 initializer=_init_worker,
                 initargs=(target_inner,),
             ) as executor:

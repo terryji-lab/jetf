@@ -619,18 +619,22 @@ def adaptive_numba_threads(concurrency: int = 1) -> Generator[int | None, None, 
 
     参数:
         concurrency: 外部并发执行的查询数。若 <= 1，保持原配置独占全核；
-                     若 > 1，自动将内层 JIT 线程设为 max(1, total_cores // concurrency)。
+                     若 > 1，自动将内层 JIT 线程设为 max(1, min(base_threads, base_threads // concurrency))。
     """
     if not _HAVE_NUMBA or concurrency <= 1:
         yield None
         return
 
     orig_threads = None
+    target_inner = None
     try:
-        orig_threads = numba.get_num_threads()
-        total_cores = os.cpu_count() or 1
-        target_inner = max(1, total_cores // concurrency)
-        numba.set_num_threads(target_inner)
+        try:
+            orig_threads = numba.get_num_threads()
+            base_threads = orig_threads
+            target_inner = max(1, min(base_threads, base_threads // concurrency))
+            numba.set_num_threads(target_inner)
+        except Exception:
+            target_inner = None
         yield target_inner
     finally:
         if orig_threads is not None:
