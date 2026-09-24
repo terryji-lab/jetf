@@ -67,3 +67,41 @@ def test_split_sah_bvh_determinism():
     flat = [idx for leaf in leaves1 for idx in leaf]
     assert len(flat) == 64
     assert len(set(flat)) == 64
+
+
+def test_split_sah_bvh_n17_boundary():
+    """验证 n=17 边界情况下候选切分点能充分探索 [8, 9] 且合法切分。"""
+    indices = list(range(17))
+    cells = [{i} for i in range(17)]
+    amps = [{i: 1.0} for i in range(17)]
+    leaves = split_sah_bvh(indices, cells, amps, target_leaf_size=16)
+    assert len(leaves) == 2
+    flat = [idx for leaf in leaves for idx in leaf]
+    assert sorted(flat) == list(range(17))
+    for leaf in leaves:
+        assert 8 <= len(leaf) <= 9
+
+
+def test_split_sah_bvh_asymmetric_selection_at_n17():
+    """验证在 n=17 时，当最优 SAH 切分点为 9 时，能被正确选出而不是退化为 8。"""
+    indices = list(range(17))
+    cells = []
+    amps = []
+    for i in range(9):
+        cells.append({50, 500 + i})
+        amps.append({50: 1.0, 500 + i: 0.1})
+    for i in range(8):
+        cells.append({80, 800 + i})
+        amps.append({80: 1.0, 800 + i: 0.1})
+
+    leaves = split_sah_bvh(indices, cells, amps, target_leaf_size=16)
+    assert len(leaves) == 2
+    leaf_sizes = sorted([len(l) for l in leaves])
+    assert leaf_sizes == [8, 9]
+
+    is_separated = (
+        (all(x < 9 for x in leaves[0]) and all(x >= 9 for x in leaves[1]))
+        or (all(x >= 9 for x in leaves[0]) and all(x < 9 for x in leaves[1]))
+    )
+    assert is_separated, "应在 pos=9 处产生完美切分"
+

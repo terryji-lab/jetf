@@ -194,3 +194,76 @@ def test_batch_root_bounds_defensive_validation():
     with pytest.raises(ValueError, match="查询向量长度不匹配"):
         batch_root_bounds(q_peaks, forest, [0], q_lower, q_upper[:-1])
 
+
+def test_batch_root_bounds_parallel_flag_and_serial_equivalence():
+    """验证 parallel=True 与 parallel=False (串行内核) 计算结果严格数值等价。"""
+    from pathlib import Path
+    import sys
+    import jetf.bounds as b
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from _subset import stratified_subset_indices, subset_parsed_library
+
+    lib_path = Path(__file__).resolve().parents[2] / "GNPS-LIBRARY.mgf"
+    parsed = parse_mgf(lib_path)
+    indices = stratified_subset_indices(parsed)
+    sub_parsed = subset_parsed_library(parsed, indices)
+    library = preprocess_library(sub_parsed, CORRECTNESS_V1)
+    forest = build_forest_index(library)
+
+    for q_row in [0, 5, 15]:
+        q_peaks = library.peaks.spectrum_at(q_row)
+        q_lower, q_upper = window_cells(
+            q_peaks.mass, DEFAULT_FRAGMENT_TOLERANCE_DA, forest.spec.summary_grid_da
+        )
+        tree_ids = np.arange(forest.n_trees, dtype=np.int64)
+
+        # 1. parallel=True (默认并行)
+        bounds_parallel = batch_root_bounds(
+            q_peaks, forest, tree_ids, q_lower, q_upper, parallel=True
+        )
+
+        # 2. parallel=False (串行)
+        bounds_serial = batch_root_bounds(
+            q_peaks, forest, tree_ids, q_lower, q_upper, parallel=False
+        )
+
+        np.testing.assert_allclose(
+            bounds_parallel,
+            bounds_serial,
+            atol=1e-12,
+            rtol=1e-12,
+            err_msg=f"查询 {q_row} 的 parallel=True 与 parallel=False 结果不一致",
+        )
+
+        # 3. 若有 Numba，直接比对 _batch_root_bounds_numba 与 _batch_root_bounds_numba_serial
+        if b._HAVE_NUMBA:
+            res_numba_parallel = b._batch_root_bounds_numba(
+                tree_ids,
+                forest.trees.root_node_id,
+                forest.envelopes.node_envelope_offsets,
+                forest.envelopes.cell_index,
+                forest.envelopes.max_peak_amplitude,
+                q_peaks.intensity,
+                q_lower,
+                q_upper,
+            )
+            res_numba_serial = b._batch_root_bounds_numba_serial(
+                tree_ids,
+                forest.trees.root_node_id,
+                forest.envelopes.node_envelope_offsets,
+                forest.envelopes.cell_index,
+                forest.envelopes.max_peak_amplitude,
+                q_peaks.intensity,
+                q_lower,
+                q_upper,
+            )
+            np.testing.assert_allclose(
+                res_numba_parallel,
+                res_numba_serial,
+                atol=1e-12,
+                rtol=1e-12,
+                err_msg=f"查询 {q_row} 的 Numba 并行与串行内核结果不一致",
+            )
+
+

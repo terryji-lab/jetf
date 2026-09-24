@@ -76,18 +76,19 @@ def split_sah_bvh(
     best_split: tuple[list[int], list[int]] | None = None
     min_total_cost = float("inf")
     half = n // 2
-    min_leaf = max(8, target_leaf_size // 2)
+    min_leaf = max(2, min(8, target_leaf_size // 2))
 
-    # 3. 在候选轴上寻找最小 SAH Cost 的平衡切分 (对齐设计规格 [half-4, half, half+4])
+    # 3. 在候选轴上寻找最小 SAH Cost 的平衡切分 (自适应扩展候选位置并保持确定性排序)
     if candidate_axes:
         candidate_positions = []
-        for delta in (0, -4, 4):
+        for delta in (0, -1, 1, -2, 2, -3, 3, -4, 4, -6, 6, -8, 8):
             pos = half + delta
             if min_leaf <= pos <= n - min_leaf and pos not in candidate_positions:
                 candidate_positions.append(pos)
         if not candidate_positions and 4 <= half <= n - 4:
             candidate_positions = [half]
 
+        candidate_positions.sort()
         pos_set = set(candidate_positions)
 
         for axis_cell in candidate_axes:

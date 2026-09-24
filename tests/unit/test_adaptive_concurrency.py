@@ -64,6 +64,18 @@ def test_adaptive_numba_threads_context():
 
     assert numba.get_num_threads() == orig
 
+    # 4. target_threads 显式设置测试
+    with adaptive_numba_threads(target_threads=1) as inner:
+        assert inner == 1
+        assert numba.get_num_threads() == 1
+    assert numba.get_num_threads() == orig
+
+    # target_threads <= 0 应收敛为 1
+    with adaptive_numba_threads(target_threads=0) as inner:
+        assert inner == 1
+        assert numba.get_num_threads() == 1
+    assert numba.get_num_threads() == orig
+
 
 def test_adaptive_numba_threads_restricted_environment(monkeypatch):
     """测试受限线程环境下 adaptive_numba_threads 不会抛出 ValueError，且防御性降级生效。"""
@@ -303,3 +315,38 @@ def test_search_forest_batch_equivalence():
 
     with pytest.raises(ValueError, match="必须提供 config 参数"):
         search_forest_batch(queries, forest, library, config=None)
+
+
+def test_search_forest_batch_parallel_root_bounds_flag(monkeypatch, synthetic_index):
+    """测试 search_forest_batch 在多并发时将 parallel_root_bounds=False 透传给 worker。"""
+    lib, forest, queries = synthetic_index
+    cfg = QueryConfig(
+        mode=SearchMode.TOP_K,
+        k=3,
+        fragment_tolerance_da=DEFAULT_FRAGMENT_TOLERANCE_DA,
+        ion_mode=IonMode.POSITIVE,
+    )
+    import jetf.search as search_mod
+
+    observed_flags = []
+    orig_search_forest = search_mod.search_forest
+
+    def _mock_search_forest(*args, **kwargs):
+        flag = kwargs.get("parallel_root_bounds", True)
+        observed_flags.append(flag)
+        return orig_search_forest(*args, **kwargs)
+
+    monkeypatch.setattr(search_mod, "search_forest", _mock_search_forest)
+
+    # 1. 单线程串行执行时，parallel_root_bounds 默认为 True
+    observed_flags.clear()
+    search_forest_batch(queries, forest, library=lib, config=cfg, concurrency=1)
+    assert len(observed_flags) == len(queries)
+    assert all(f is True for f in observed_flags)
+
+    # 2. 多线程并发执行时，parallel_root_bounds 应被设为 False 防止嵌套过度订阅
+    observed_flags.clear()
+    search_forest_batch(queries, forest, library=lib, config=cfg, concurrency=2)
+    assert len(observed_flags) == len(queries)
+    assert all(f is False for f in observed_flags)
+

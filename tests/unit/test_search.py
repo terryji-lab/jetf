@@ -67,6 +67,8 @@ def test_search_forest_open_topk_matches_exhaustive(subset_data):
             assert h_f.n_matched == h_e.n_matched
 
         assert res_forest.stats.nodes_visited > 0
+        assert res_forest.stats.probe_scored >= 0
+        assert res_forest.stats.probe_scored <= res_forest.stats.n_scored
 
 
 def test_search_forest_open_matches_exhaustive(subset_data):
@@ -100,3 +102,33 @@ def test_search_forest_open_matches_exhaustive(subset_data):
             assert h_f.n_matched == h_e.n_matched
 
         assert res_forest.stats.pruned_by_layer["roots_pruned"] > 0
+        assert res_forest.stats.probe_scored == 0
+
+
+def test_search_stats_probe_scored_and_backward_compatibility():
+    """验证 SearchStats probe_scored 统计字段与其向后兼容性。"""
+    from jetf.results import SearchStats
+
+    # 1. 旧调用方式（不传入 probe_scored，保持默认值 0）
+    old_stats = SearchStats(
+        nodes_visited=100,
+        n_scored=20,
+        pruned_by_layer={"roots_pruned": 10},
+    )
+    assert old_stats.probe_scored == 0
+    assert old_stats.nodes_visited == 100
+    assert old_stats.n_scored == 20
+    assert old_stats.bound_eval_time_ms == 0.0
+    assert old_stats.exact_eval_time_ms == 0.0
+
+    # 2. 显式传入 probe_scored
+    new_stats = SearchStats(
+        nodes_visited=150,
+        n_scored=30,
+        pruned_by_layer={"roots_pruned": 15},
+        bound_eval_time_ms=1.5,
+        exact_eval_time_ms=3.2,
+        probe_scored=12,
+    )
+    assert new_stats.probe_scored == 12
+    assert new_stats.probe_scored <= new_stats.n_scored

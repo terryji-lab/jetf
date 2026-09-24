@@ -243,6 +243,78 @@ if _HAVE_NUMBA:
 
         return out_bounds
 
+    @numba.njit(parallel=False, fastmath=False, nogil=True)
+    def _batch_root_bounds_numba_serial(
+        tree_ids: NDArray[np.int64],
+        root_node_ids: NDArray[np.int64],
+        env_offsets: NDArray[np.int64],
+        cell_index: NDArray[np.int64],
+        max_peak_amplitude: NDArray[np.float64],
+        q_intensity: NDArray[np.float64],
+        cell_lower: NDArray[np.int64],
+        cell_upper: NDArray[np.int64],
+    ) -> NDArray[np.float64]:
+        n_trees = tree_ids.shape[0]
+        n_peaks = q_intensity.shape[0]
+        out_bounds = np.zeros(n_trees, dtype=np.float64)
+
+        for i in range(n_trees):
+            t_id = tree_ids[i]
+            root_id = root_node_ids[t_id]
+            start = env_offsets[root_id]
+            end = env_offsets[root_id + 1]
+            if start >= end:
+                continue
+
+            # 1. 快速包络盒相交过滤：若树最大 cell < 查询最小 cell 或树最小 cell > 查询最大 cell，直接短路
+            if cell_index[end - 1] < cell_lower[0] or cell_index[start] > cell_upper[n_peaks - 1]:
+                continue
+
+            s = 0.0
+            k_left = start
+            for p in range(n_peaks):
+                c_low = cell_lower[p]
+                c_high = cell_upper[p]
+
+                # 单调二分：query 峰质量升序，故 >= c_low 的起点单调不减
+                low = k_left
+                high = end
+                while low < high:
+                    mid = (low + high) >> 1
+                    if cell_index[mid] < c_low:
+                        low = mid + 1
+                    else:
+                        high = mid
+                k_left = low
+                if k_left >= end:
+                    break
+
+                # 二分查找：定位 cell_index[k_left:end] 中 > c_high 的最左侧位置
+                low = k_left
+                high = end
+                while low < high:
+                    mid = (low + high) >> 1
+                    if cell_index[mid] <= c_high:
+                        low = mid + 1
+                    else:
+                        high = mid
+                k_right = low
+
+                if k_right > k_left:
+                    m_val = max_peak_amplitude[k_left]
+                    for k in range(k_left + 1, k_right):
+                        val = max_peak_amplitude[k]
+                        if val > m_val:
+                            m_val = val
+                    s += q_intensity[p] * m_val
+
+            if s > 0.0:
+                out_bounds[i] = s * (1.0 + 1e-12)
+            else:
+                out_bounds[i] = 0.0
+
+        return out_bounds
+
     @numba.njit(fastmath=False, nogil=True)
     def _batch_node_bounds_numba(
         node_ids: NDArray[np.int64],
@@ -372,6 +444,13 @@ if _HAVE_NUMBA:
         return 0.0
 
     _leaf_bound_numba = _single_node_bound_numba
+    _batch_node_bounds_numba_serial = _batch_node_bounds_numba
+else:
+    _leaf_bound_numba = None
+    _batch_root_bounds_numba = None
+    _batch_root_bounds_numba_serial = None
+    _batch_node_bounds_numba = None
+    _batch_node_bounds_numba_serial = None
 
 
 def _batch_root_bounds_numpy(
@@ -492,10 +571,12 @@ def batch_root_bounds(
     tree_ids: Sequence[int] | NDArray[np.int64],
     cell_lower: NDArray[np.int64],
     cell_upper: NDArray[np.int64],
+    parallel: bool = True,
 ) -> NDArray[np.float64]:
     """批量计算一组候选树根节点的峰上界 U_peak(Root)。
 
-    若环境存在 Numba，采用多线程 JIT 并行二分内核进行树级别并行求值；
+    若环境存在 Numba，可采用多线程 JIT 并行二分内核进行树级别并行求值（parallel=True 且 numba 线程数 > 1 时），
+    或采用单线程串行 JIT 内核（parallel=False 或 numba 线程数 <= 1 时）；
     无 Numba 环境时自动降级至 NumPy 向量化复用内核。
     保证与单个 peak_bound(build_query_context(...)) 计算结果数学完全等价，
     并在浮点误差范围内严格遵守零漏检（Zero False Dismissals）性质。
@@ -530,7 +611,19 @@ def batch_root_bounds(
     max_peak_amplitude = forest.envelopes.max_peak_amplitude
 
     if _HAVE_NUMBA:
-        return _batch_root_bounds_numba(
+        use_parallel = parallel and (numba.get_num_threads() > 1)
+        if use_parallel:
+            return _batch_root_bounds_numba(
+                tree_ids_arr,
+                root_node_ids,
+                env_offsets,
+                cell_index,
+                max_peak_amplitude,
+                q_intensity,
+                cell_lower_arr,
+                cell_upper_arr,
+            )
+        return _batch_root_bounds_numba_serial(
             tree_ids_arr,
             root_node_ids,
             env_offsets,
@@ -614,14 +707,18 @@ def batch_node_bounds(
 
 
 @contextmanager
-def adaptive_numba_threads(concurrency: int = 1) -> Generator[int | None, None, None]:
+def adaptive_numba_threads(
+    concurrency: int = 1,
+    target_threads: int | None = None,
+) -> Generator[int | None, None, None]:
     """自适应管理 Numba 内部 JIT 线程数，防止多线程并发时的嵌套过度订阅。
 
     参数:
-        concurrency: 外部并发执行的查询数。若 <= 1，保持原配置独占全核；
+        concurrency: 外部并发执行的查询数。若 <= 1（且未指定 target_threads），保持原配置独占全核；
                      若 > 1，自动将内层 JIT 线程设为 max(1, min(base_threads, base_threads // concurrency))。
+        target_threads: 显式指定目标 JIT 线程数。若非 None，将直接覆盖 concurrency 的计算并设为 max(1, target_threads)。
     """
-    if not _HAVE_NUMBA or concurrency <= 1:
+    if not _HAVE_NUMBA or (concurrency <= 1 and target_threads is None):
         yield None
         return
 
@@ -631,7 +728,10 @@ def adaptive_numba_threads(concurrency: int = 1) -> Generator[int | None, None, 
         try:
             orig_threads = numba.get_num_threads()
             base_threads = orig_threads
-            target_inner = max(1, min(base_threads, base_threads // concurrency))
+            if target_threads is not None:
+                target_inner = max(1, target_threads)
+            else:
+                target_inner = max(1, min(base_threads, base_threads // concurrency))
             numba.set_num_threads(target_inner)
         except Exception:
             target_inner = None

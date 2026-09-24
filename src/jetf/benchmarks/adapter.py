@@ -9,6 +9,8 @@ import numpy as np
 
 logging.getLogger("matchms").setLevel(logging.ERROR)
 
+from jetf.cleaning import DEFAULT_CLEAN_CONFIG, MatchmsCleanConfig, clean_spectrum_with_matchms
+
 if TYPE_CHECKING:
     import matchms
     from jetf.preprocessing import PreprocessedLibrary
@@ -33,6 +35,8 @@ def jetf_peaks_to_matchms(
     peaks: SpectrumPeaks,
     meta: SpectrumMeta | None = None,
     use_normalized_intensity: bool = True,
+    clean: bool = True,
+    clean_config: MatchmsCleanConfig | None = None,
 ) -> matchms.Spectrum:
     """将 JETF SpectrumPeaks 转换为 matchms.Spectrum 对象。
 
@@ -40,6 +44,8 @@ def jetf_peaks_to_matchms(
     - peaks: JETF SpectrumPeaks 对象
     - meta: 可选的元数据 SpectrumMeta
     - use_normalized_intensity: 若为 True，使用 L2 归一化后的强度 (范数为 1)；若为 False，恢复原始强度
+    - clean: 是否启用 matchms 工业级数据清洗流水线 (默认 True)
+    - clean_config: 清洗参数配置 (默认 DEFAULT_CLEAN_CONFIG)
     """
     from matchms import Spectrum
 
@@ -53,6 +59,7 @@ def jetf_peaks_to_matchms(
     if meta is not None:
         if meta.precursor_mz is not None:
             metadata["precursor_mz"] = float(meta.precursor_mz)
+            metadata["pepmass"] = (float(meta.precursor_mz),)
         metadata["ionmode"] = meta.ion_mode.value
         metadata["external_id"] = meta.external_id
         if meta.charge is not None:
@@ -60,13 +67,22 @@ def jetf_peaks_to_matchms(
         if meta.raw_metadata:
             metadata.update(meta.raw_metadata)
 
-    return Spectrum(mz=mz, intensities=intensities, metadata=metadata)
+    spec = Spectrum(mz=mz, intensities=intensities, metadata=metadata)
+    if clean:
+        cfg = clean_config if clean_config is not None else DEFAULT_CLEAN_CONFIG
+        cleaned = clean_spectrum_with_matchms(spec, config=cfg)
+        if cleaned is not None and len(cleaned.peaks.mz) > 0:
+            return cleaned
+
+    return spec
 
 
 def jetf_library_to_matchms(
     library: PreprocessedLibrary,
     indices: Sequence[int] | None = None,
     use_normalized_intensity: bool = True,
+    clean: bool = True,
+    clean_config: MatchmsCleanConfig | None = None,
 ) -> list[matchms.Spectrum]:
     """将 JETF PreprocessedLibrary 中的谱批量转换为 matchms.Spectrum 列表。"""
     rows = range(library.n_spectra) if indices is None else indices
@@ -79,6 +95,8 @@ def jetf_library_to_matchms(
                 peaks,
                 meta=meta,
                 use_normalized_intensity=use_normalized_intensity,
+                clean=clean,
+                clean_config=clean_config,
             )
         )
     return spectra

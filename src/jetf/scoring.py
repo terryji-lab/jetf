@@ -162,6 +162,8 @@ def score_greedy_cosine(
 
     picked = np.array(accepted, dtype=INTERNAL_ID_DTYPE)
     score = sum_float64(weights[picked])
+    # 浮点舍入容差钳制：CPU 使用 FP64，理论值 1.0 时累加可能因浮点舍入产生微小扰动 (例如 1.0000000000000002 或 0.9999999999999999)
+    # 将 [1.0 - 1e-12, +inf) 规范化钳制为 1.0 (与 GPU 端的 FP32 1e-6 截断带逻辑统一对应)
     if abs(score - 1.0) <= 1e-12 or score > 1.0:
         score = 1.0
     return GreedyCosineResult(

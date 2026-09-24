@@ -1,7 +1,7 @@
 {
   "report_title": "JET-Forest vs matchms Benchmark Report",
   "metadata": {
-    "timestamp": "2026-09-21T15:30:57.275111+00:00",
+    "timestamp": "2026-09-24T09:52:18.213927+00:00",
     "python_version": "3.10.6",
     "platform": "Windows-10-10.0.26200-SP0",
     "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
@@ -16,14 +16,14 @@
       "tabulate": "0.10.0"
     },
     "config": {
-      "mode": "consistency",
+      "mode": "all",
       "library_size": 2000,
       "n_queries": 30,
       "n_pairs": 1000,
       "tolerance": 0.02,
       "tolerance_da": 0.02,
       "seed": 2026,
-      "mgf": "D:\\JETF\\GNPS-LIBRARY.mgf",
+      "mgf": "GNPS-LIBRARY.mgf",
       "clean": true,
       "clean_max_peaks": 300,
       "clean_min_rel": 0.001
@@ -33,12 +33,12 @@
     "pairwise_consistency": {
       "n_pairs": 1000,
       "tolerance_da": 0.02,
-      "max_absolute_error": 0.00010319971470382217,
-      "mean_absolute_error": 1.031997147140729e-07,
-      "rmse": 3.2634615234364706e-06,
+      "max_absolute_error": 0.0001031997147037389,
+      "mean_absolute_error": 1.0319971471368416e-07,
+      "rmse": 3.263461523433837e-06,
       "matched_peak_match_rate": 0.999,
       "p50_error": 0.0,
-      "p95_error": 6.938893903907228e-18,
+      "p95_error": 1.0408340855860843e-17,
       "p99_error": 2.220446049250313e-16,
       "discrepant_pairs_count": 1
     },
@@ -49,7 +49,7 @@
         "mean_recall_at_k": 1.0,
         "all_zero_false_dismissals": true,
         "total_false_dismissals": 0,
-        "max_score_discrepancy": 0.0006439596159200089,
+        "max_score_discrepancy": 0.0006439596159197314,
         "details": [
           {
             "query_index": 1211,
@@ -58,7 +58,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-17,
+            "max_score_diff": 8.881784197001252e-16,
             "rank_consistent": true
           },
           {
@@ -68,7 +68,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.163336342344337e-17,
+            "max_score_diff": 6.938893903907228e-17,
             "rank_consistent": true
           },
           {
@@ -78,7 +78,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 1.1102230246251565e-16,
             "rank_consistent": true
           },
           {
@@ -88,7 +88,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.0816681711721685e-17,
+            "max_score_diff": 1.3877787807814457e-17,
             "rank_consistent": true
           },
           {
@@ -108,7 +108,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 4.163336342344337e-17,
             "rank_consistent": true
           },
           {
@@ -118,7 +118,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -128,7 +128,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.220446049250313e-16,
+            "max_score_diff": 4.440892098500626e-16,
             "rank_consistent": true
           },
           {
@@ -138,7 +138,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 5.551115123125783e-16,
             "rank_consistent": true
           },
           {
@@ -148,7 +148,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 1.6653345369377348e-16,
             "rank_consistent": true
           },
           {
@@ -158,7 +158,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.7755575615628914e-17,
+            "max_score_diff": 5.551115123125783e-17,
             "rank_consistent": true
           },
           {
@@ -168,7 +168,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.7755575615628914e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -178,7 +178,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 1.6653345369377348e-16,
             "rank_consistent": true
           },
           {
@@ -188,7 +188,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.6653345369377348e-16,
+            "max_score_diff": 5.551115123125783e-17,
             "rank_consistent": true
           },
           {
@@ -198,7 +198,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -218,7 +218,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 1.0408340855860843e-17,
             "rank_consistent": true
           },
           {
@@ -228,7 +228,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 4.163336342344337e-17,
             "rank_consistent": true
           },
           {
@@ -238,7 +238,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.440892098500626e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -248,7 +248,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 7.771561172376096e-16,
+            "max_score_diff": 5.551115123125783e-16,
             "rank_consistent": true
           },
           {
@@ -258,7 +258,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 7.771561172376096e-16,
             "rank_consistent": true
           },
           {
@@ -268,7 +268,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 1.0408340855860843e-17,
             "rank_consistent": true
           },
           {
@@ -278,7 +278,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.7755575615628914e-17,
+            "max_score_diff": 5.551115123125783e-17,
             "rank_consistent": true
           },
           {
@@ -288,7 +288,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 0.0006439596159200089,
+            "max_score_diff": 0.0006439596159197314,
             "rank_consistent": true
           },
           {
@@ -308,7 +308,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-17,
+            "max_score_diff": 1.3877787807814457e-17,
             "rank_consistent": true
           },
           {
@@ -328,7 +328,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.163336342344337e-17,
+            "max_score_diff": 8.326672684688674e-17,
             "rank_consistent": true
           },
           {
@@ -338,7 +338,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-16,
+            "max_score_diff": 8.881784197001252e-16,
             "rank_consistent": true
           },
           {
@@ -359,7 +359,7 @@
         "mean_recall_at_k": 1.0,
         "all_zero_false_dismissals": true,
         "total_false_dismissals": 0,
-        "max_score_discrepancy": 0.0006439596159200089,
+        "max_score_discrepancy": 0.0006439596159197314,
         "details": [
           {
             "query_index": 1211,
@@ -368,7 +368,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-17,
+            "max_score_diff": 8.881784197001252e-16,
             "rank_consistent": true
           },
           {
@@ -378,7 +378,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.163336342344337e-17,
+            "max_score_diff": 6.938893903907228e-17,
             "rank_consistent": true
           },
           {
@@ -388,7 +388,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 1.1102230246251565e-16,
             "rank_consistent": true
           },
           {
@@ -398,7 +398,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.0816681711721685e-17,
+            "max_score_diff": 1.3877787807814457e-17,
             "rank_consistent": true
           },
           {
@@ -418,7 +418,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 4.163336342344337e-17,
             "rank_consistent": true
           },
           {
@@ -438,7 +438,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.220446049250313e-16,
+            "max_score_diff": 4.440892098500626e-16,
             "rank_consistent": true
           },
           {
@@ -448,7 +448,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 5.551115123125783e-16,
             "rank_consistent": true
           },
           {
@@ -458,7 +458,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 1.6653345369377348e-16,
             "rank_consistent": true
           },
           {
@@ -468,7 +468,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.7755575615628914e-17,
+            "max_score_diff": 5.551115123125783e-17,
             "rank_consistent": true
           },
           {
@@ -478,7 +478,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.7755575615628914e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -488,7 +488,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 1.6653345369377348e-16,
             "rank_consistent": true
           },
           {
@@ -498,7 +498,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.6653345369377348e-16,
+            "max_score_diff": 5.551115123125783e-17,
             "rank_consistent": true
           },
           {
@@ -508,7 +508,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -528,7 +528,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 6.938893903907228e-18,
             "rank_consistent": true
           },
           {
@@ -538,7 +538,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 4.163336342344337e-17,
             "rank_consistent": true
           },
           {
@@ -548,7 +548,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.440892098500626e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -568,7 +568,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 7.771561172376096e-16,
             "rank_consistent": true
           },
           {
@@ -578,7 +578,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.3877787807814457e-17,
+            "max_score_diff": 1.0408340855860843e-17,
             "rank_consistent": true
           },
           {
@@ -588,7 +588,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.7755575615628914e-17,
+            "max_score_diff": 5.551115123125783e-17,
             "rank_consistent": true
           },
           {
@@ -598,7 +598,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 0.0006439596159200089,
+            "max_score_diff": 0.0006439596159197314,
             "rank_consistent": true
           },
           {
@@ -618,7 +618,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-17,
+            "max_score_diff": 1.3877787807814457e-17,
             "rank_consistent": true
           },
           {
@@ -638,7 +638,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.163336342344337e-17,
+            "max_score_diff": 8.326672684688674e-17,
             "rank_consistent": true
           },
           {
@@ -648,7 +648,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-16,
+            "max_score_diff": 8.881784197001252e-16,
             "rank_consistent": true
           },
           {
@@ -669,7 +669,7 @@
         "mean_recall_at_k": 1.0,
         "all_zero_false_dismissals": true,
         "total_false_dismissals": 0,
-        "max_score_discrepancy": 5.329070518200751e-15,
+        "max_score_discrepancy": 4.107825191113079e-15,
         "details": [
           {
             "query_index": 1211,
@@ -678,7 +678,7 @@
             "matchms_hit_count": 1,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 0.0,
+            "max_score_diff": 8.881784197001252e-16,
             "rank_consistent": true
           },
           {
@@ -698,7 +698,7 @@
             "matchms_hit_count": 1,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 1.1102230246251565e-16,
             "rank_consistent": true
           },
           {
@@ -738,7 +738,7 @@
             "matchms_hit_count": 14,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-16,
+            "max_score_diff": 3.3306690738754696e-16,
             "rank_consistent": true
           },
           {
@@ -748,7 +748,7 @@
             "matchms_hit_count": 3,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 2.220446049250313e-16,
+            "max_score_diff": 4.440892098500626e-16,
             "rank_consistent": true
           },
           {
@@ -758,7 +758,7 @@
             "matchms_hit_count": 4,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 5.551115123125783e-16,
             "rank_consistent": true
           },
           {
@@ -788,7 +788,7 @@
             "matchms_hit_count": 3,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 1.1102230246251565e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -798,7 +798,7 @@
             "matchms_hit_count": 2,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 0.0,
+            "max_score_diff": 1.1102230246251565e-16,
             "rank_consistent": true
           },
           {
@@ -818,7 +818,7 @@
             "matchms_hit_count": 1,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -858,7 +858,7 @@
             "matchms_hit_count": 1,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 4.440892098500626e-16,
+            "max_score_diff": 2.220446049250313e-16,
             "rank_consistent": true
           },
           {
@@ -878,7 +878,7 @@
             "matchms_hit_count": 5,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 3.3306690738754696e-16,
+            "max_score_diff": 7.771561172376096e-16,
             "rank_consistent": true
           },
           {
@@ -908,7 +908,7 @@
             "matchms_hit_count": 1,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.329070518200751e-15,
+            "max_score_diff": 4.107825191113079e-15,
             "rank_consistent": true
           },
           {
@@ -958,7 +958,7 @@
             "matchms_hit_count": 10,
             "recall_at_k": 1.0,
             "zero_false_dismissals": true,
-            "max_score_diff": 5.551115123125783e-16,
+            "max_score_diff": 8.881784197001252e-16,
             "rank_consistent": true
           },
           {
@@ -974,6 +974,81 @@
         ]
       }
     ],
-    "retrieval_throughput": []
+    "pairwise_throughput": {
+      "n_pairs": 1000,
+      "jetf_pairs_per_sec": 55245.26135307609,
+      "matchms_pairs_per_sec": 49506.91114645966,
+      "jetf_avg_time_us": 18.101099994964898,
+      "matchms_avg_time_us": 20.199200007482432,
+      "speedup": 1.1159100835364233
+    },
+    "retrieval_throughput": [
+      {
+        "mode_name": "开放检索 Top-10 (全库无限制)",
+        "n_queries": 30,
+        "library_size": 2000,
+        "jetf_qps": 171.02446504164308,
+        "matchms_qps": 27.656213355829376,
+        "jetf_latency_mean_ms": 5.846016667298197,
+        "jetf_latency_p50_ms": 4.749500003526919,
+        "jetf_latency_p95_ms": 10.776819998136483,
+        "jetf_latency_p99_ms": 15.099645997979682,
+        "matchms_latency_mean_ms": 36.15823999959199,
+        "matchms_latency_p50_ms": 37.2192999930121,
+        "matchms_latency_p95_ms": 47.64256000489694,
+        "matchms_latency_p99_ms": 48.96057700243546,
+        "speedup": 6.185107237523996,
+        "avg_scored_ratio": 0.02275,
+        "avg_pruned_ratio": 0.97725,
+        "jetf_latency_std_ms": 3.047066169513893,
+        "matchms_latency_std_ms": 9.608578343610649,
+        "concurrency": 1,
+        "throughput_speedup": 6.183943652777561
+      },
+      {
+        "mode_name": "开放检索 Top-5 (全库无限制)",
+        "n_queries": 30,
+        "library_size": 2000,
+        "jetf_qps": 255.55404116100036,
+        "matchms_qps": 27.184424845429948,
+        "jetf_latency_mean_ms": 3.911886664961154,
+        "jetf_latency_p50_ms": 2.992699999595061,
+        "jetf_latency_p95_ms": 9.265704994322723,
+        "jetf_latency_p99_ms": 13.983577006583804,
+        "matchms_latency_mean_ms": 36.78577000197644,
+        "matchms_latency_p50_ms": 37.99704999983078,
+        "matchms_latency_p95_ms": 50.1415349979652,
+        "matchms_latency_p99_ms": 52.896374003903475,
+        "speedup": 9.403587872692556,
+        "avg_scored_ratio": 0.013016666666666668,
+        "avg_pruned_ratio": 0.9869833333333333,
+        "jetf_latency_std_ms": 2.946999532496536,
+        "matchms_latency_std_ms": 10.436546321966661,
+        "concurrency": 1,
+        "throughput_speedup": 9.40075218122418
+      },
+      {
+        "mode_name": "开放检索 Threshold >= 0.50",
+        "n_queries": 30,
+        "library_size": 2000,
+        "jetf_qps": 678.5779721015421,
+        "matchms_qps": 26.6270338057113,
+        "jetf_latency_mean_ms": 1.472593335104951,
+        "jetf_latency_p50_ms": 0.675899995258078,
+        "jetf_latency_p95_ms": 6.121950002852821,
+        "jetf_latency_p99_ms": 7.310378007678082,
+        "matchms_latency_mean_ms": 37.55581666725144,
+        "matchms_latency_p50_ms": 39.38324999762699,
+        "matchms_latency_p95_ms": 50.15565499925287,
+        "matchms_latency_p99_ms": 54.395337006862974,
+        "speedup": 25.503182563687794,
+        "avg_scored_ratio": 0.0020499999999999997,
+        "avg_pruned_ratio": 0.99795,
+        "jetf_latency_std_ms": 1.8402012308564084,
+        "matchms_latency_std_ms": 10.49818411666144,
+        "concurrency": 1,
+        "throughput_speedup": 25.484549914680777
+      }
+    ]
   }
 }

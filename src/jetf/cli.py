@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 import time
@@ -111,18 +112,99 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         format_pairwise_throughput_table,
         format_retrieval_consistency_table,
         format_retrieval_throughput_table,
-        save_json_report,
         save_csv_report,
+        save_json_report,
     )
-    from jetf.benchmarks.throughput import benchmark_pairwise_throughput, benchmark_retrieval_throughput
+    from jetf.benchmarks.throughput import (
+        benchmark_pairwise_throughput,
+        benchmark_retrieval_throughput,
+    )
+    from jetf.benchmarks.unified_runner import MultiEngineBenchmarkRunner
+    from jetf.gpu import GpuForestIndex, is_cuda_available, require_cuda
     from jetf.query import QueryConfig, SearchMode
     from jetf.types import IonMode
 
     print("=" * 70)
-    print("  JET-Forest vs matchms 全景基准评测 (吞吐量与结果一致性)")
+    print("  JET-Forest 全景基准评测 (Consistency & Throughput)")
     print("=" * 70)
 
-    # 1. 优先分支：直接从脱机快照评测 (零 MGF 依赖，秒级载入)
+    # 如果显式指定了 --engines，分流至多引擎调度器 (MultiEngineBenchmarkRunner)
+    if getattr(args, "engines", None) is not None:
+        target_path_str = getattr(args, "snapshot", None) or getattr(args, "mgf", None) or getattr(args, "mgf_opt", None)
+        target_path = Path(target_path_str) if target_path_str else None
+        if target_path is None or not target_path.exists():
+            for c in [Path("cleaned_forest.npz"), Path("all_gnps_forest.npz"), Path("GNPS-LIBRARY.mgf")]:
+                if c.is_file():
+                    target_path = c
+                    break
+        if target_path is None or not target_path.is_file():
+            print("[ERROR] 未找到有效的基准测试输入文件。请通过参数指定 .npz 快照文件或 .mgf 原始库文件。")
+            return 1
+
+        is_snapshot = (target_path.suffix.lower() == ".npz")
+        engines_str = args.engines
+        requested_engines = [e.strip().lower() for e in engines_str.split(",") if e.strip()]
+        if getattr(args, "skip_matchms", False):
+            requested_engines = [e for e in requested_engines if e != "matchms"]
+
+        clean_enabled = bool(getattr(args, "clean", True))
+        batch_size = getattr(args, "batch_size", 128)
+        cpu_threads = getattr(args, "cpu_threads", None) or getattr(args, "concurrency", 1)
+        seed = getattr(args, "seed", 2026)
+
+        if is_snapshot:
+            runner = MultiEngineBenchmarkRunner(
+                dataset=target_path,
+                engines=requested_engines,
+                tolerance_da=args.tolerance,
+                batch_size=batch_size,
+                cpu_threads=cpu_threads,
+                clean_matchms=clean_enabled,
+            )
+        else:
+            clean_cfg = (
+                MatchmsCleanConfig(
+                    max_peaks=args.clean_max_peaks,
+                    min_relative_intensity=args.clean_min_rel,
+                )
+                if clean_enabled
+                else None
+            )
+            dataset = load_benchmark_dataset(
+                mgf_path=target_path,
+                library_size=args.library_size,
+                clean_config=clean_cfg,
+                max_records=getattr(args, "max_records", None),
+                seed=seed,
+            )
+            runner = MultiEngineBenchmarkRunner(
+                dataset=dataset,
+                engines=requested_engines,
+                tolerance_da=args.tolerance,
+                batch_size=batch_size,
+                cpu_threads=cpu_threads,
+                clean_matchms=clean_enabled,
+            )
+
+        print(f"[*] 启动统一多引擎基准压测 (n_queries={args.n_queries}, batch_size={batch_size})...")
+        report = runner.generate_report(
+            n_queries=args.n_queries,
+            mode="open",
+            top_k=10,
+            batch_size=batch_size,
+            run_scaling=(args.mode == "throughput"),
+        )
+        print("\n" + report.format_console_table())
+
+        if args.output_json:
+            out_json_p = Path(args.output_json)
+            out_json_p.parent.mkdir(parents=True, exist_ok=True)
+            with open(out_json_p, "w", encoding="utf-8") as f:
+                json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
+            print(f"\n[OK] 结构化 JSON 评测结果已保存至: {out_json_p.resolve()}")
+        return 0
+
+    # 1. 优先分支：直接从快照加载 (免 MGF 解析级别加速)
     if getattr(args, "snapshot", None):
         snap_path = Path(args.snapshot)
         if not snap_path.is_file():
@@ -133,7 +215,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             print("[ERROR] 脱机快照评测当前仅支持 --mode throughput。如需与 matchms 进行全库检索排序与零漏检一致性校验，请指定 MGF 输入模式。")
             return 1
 
-        print(f"[*] 直接从脱机快照加载森林索引: {snap_path}...")
+        print(f"[*] 直接从快照加载森林: {snap_path}...")
         t0 = time.perf_counter()
         forest = load_forest_snapshot(snap_path)
         print(f"    快照就绪: {forest.n_spectra:,} 条谱，加载耗时 {time.perf_counter() - t0:.2f}s")
@@ -267,97 +349,118 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             for p in csv_paths:
                 print(f"[OK] 结构化 CSV 评测结果已保存至: {p.resolve()}")
 
-        print("\n[OK] 快照脱机基准评测全部完成！")
+        print("\n[OK] 基准评测全部完成！")
         return 0
 
-    # 2. 常规分支：从 MGF 解析与清洗构建基准数据集
-    if not getattr(args, "skip_matchms", False):
-        check_matchms_available()
+    # 2. 原始 MGF 库构建与系统性对拍 (matchms 对比基准)
+    target_path_str = getattr(args, "mgf", None) or getattr(args, "mgf_opt", None)
+    target_path = Path(target_path_str) if target_path_str else None
 
-    print(f"[*] 加载基准数据集 (目标库容量: {args.library_size:,} 条谱)...")
-    t0 = time.perf_counter()
+    # 如果未指定，尝试在当前目录下自动探测默认 MGF
+    if target_path is None or not target_path.exists():
+        candidates = [
+            Path("GNPS-LIBRARY.mgf"),
+        ]
+        for c in candidates:
+            if c.is_file():
+                target_path = c
+                break
+
+    if target_path is None or not target_path.is_file():
+        print("[ERROR] 未找到有效的 MGF 输入文件。请通过参数指定 .mgf 原始库文件。")
+        return 1
+
+    clean_enabled = bool(getattr(args, "clean", True))
+    seed = getattr(args, "seed", 2026)
+    use_gpu = getattr(args, "gpu", False)
+    if use_gpu and not is_cuda_available():
+        print("[WARNING] 请求了 GPU 模式，但当前环境未检测到可用 CUDA 设备，将回退至 CPU。")
+        use_gpu = False
+
     clean_cfg = (
         MatchmsCleanConfig(
             max_peaks=args.clean_max_peaks,
             min_relative_intensity=args.clean_min_rel,
         )
-        if getattr(args, "clean", True)
+        if clean_enabled
         else None
     )
-    if clean_cfg:
-        print(f"[*] 已启用 matchms 工业级清洗 (max_peaks={args.clean_max_peaks}, min_rel={args.clean_min_rel})")
-    else:
-        print("[*] 跳过 matchms 清洗 (--no-clean 指定)")
-    seed = getattr(args, "seed", 2026)
-    mgf_val = getattr(args, "mgf", None) or getattr(args, "mgf_opt", None)
+    t0 = time.perf_counter()
     dataset = load_benchmark_dataset(
-        mgf_path=mgf_val,
+        mgf_path=target_path,
         library_size=args.library_size,
         clean_config=clean_cfg,
         max_records=getattr(args, "max_records", None),
         seed=seed,
     )
-    print(f"    数据集就绪: {dataset.n_spectra:,} 条谱，构建森林耗时 {time.perf_counter() - t0:.2f}s")
+    print(f"    数据集就绪: {dataset.n_spectra:,} 条谱，加载耗时 {time.perf_counter() - t0:.2f}s")
 
-    print(f"[*] 抽样代表性查询谱 ({args.n_queries} 条, seed={seed})...")
-    queries = sample_query_spectra(dataset.library, n_queries=args.n_queries, seed=seed)
-    print(f"    抽样完成: {len(queries)} 条查询谱")
-
-    # 构建代表性谱对（用于算子微基准与单对一致性测试，采用分层抽样）
-    pairs: list[tuple[Any, Any]] = []
-
-    # 1. 近前体谱对 (前体相近 <= 0.5 Da, 排除自匹配)
-    rng = np.random.default_rng(seed)
-    prec_list = [
-        (i, dataset.library.spectra[i].precursor_mz)
-        for i in range(dataset.library.n_spectra)
-        if dataset.library.spectra[i].precursor_mz is not None
-    ]
-    prec_list.sort(key=lambda x: x[1])  # type: ignore[arg-type]
-    near_pairs = []
-    for idx in range(len(prec_list) - 1):
-        if prec_list[idx][0] != prec_list[idx + 1][0]:
-            if prec_list[idx + 1][1] - prec_list[idx][1] <= 0.5:  # type: ignore[operator]
-                near_pairs.append((prec_list[idx][0], prec_list[idx + 1][0]))
-    if near_pairs:
-        chosen_near = rng.choice(len(near_pairs), size=min(100, len(near_pairs)), replace=False)
-        for c_idx in chosen_near:
-            i, j = near_pairs[c_idx]
-            pairs.append((dataset.library.peaks.spectrum_at(int(i)), dataset.library.peaks.spectrum_at(int(j))))
-
-    # 2. 随机库谱对（大多不相交，排除自配对并去重）
-    remaining = max(0, args.n_pairs - len(pairs))
-    if remaining > 0:
-        seen_pairs = {(near_pairs[c][0], near_pairs[c][1]) for c in (chosen_near if near_pairs else [])}
-        while len(pairs) < args.n_pairs:
-            batch_sz = max(100, remaining * 2)
-            r1 = rng.choice(dataset.library.n_spectra, size=batch_sz, replace=True)
-            r2 = rng.choice(dataset.library.n_spectra, size=batch_sz, replace=True)
-            for i, j in zip(r1, r2):
-                if i != j:
-                    pkey = (min(int(i), int(j)), max(int(i), int(j)))
-                    if pkey not in seen_pairs:
-                        seen_pairs.add(pkey)
-                        pairs.append((dataset.library.peaks.spectrum_at(int(i)), dataset.library.peaks.spectrum_at(int(j))))
-                        if len(pairs) >= args.n_pairs:
-                            break
+    gpu_forest = None
+    if use_gpu:
+        print("[*] 初始化 GPU 森林结构...")
+        require_cuda()
+        gpu_forest = GpuForestIndex.from_forest(dataset.forest)
+        print("    GPU 显存驻留就绪")
 
     pairwise_cons = None
     retrieval_cons_list = []
     pairwise_tp = None
     retrieval_tp_list = []
 
-    # 1. 结果一致性评测
+    # 构建代表性谱对（近前体谱对 + 随机谱对）
+    pairs: list[tuple[Any, Any]] = []
+    if getattr(args, "n_pairs", 0) > 0:
+        rng = np.random.default_rng(seed)
+        prec_list = [
+            (i, dataset.library.spectra[i].precursor_mz)
+            for i in range(dataset.library.n_spectra)
+            if dataset.library.spectra[i].precursor_mz is not None
+        ]
+        prec_list.sort(key=lambda x: x[1])
+        near_pairs = []
+        for idx in range(len(prec_list) - 1):
+            if prec_list[idx][0] != prec_list[idx + 1][0]:
+                if prec_list[idx + 1][1] - prec_list[idx][1] <= 0.5:
+                    near_pairs.append((prec_list[idx][0], prec_list[idx + 1][0]))
+        chosen_near = []
+        if near_pairs:
+            chosen_near = rng.choice(len(near_pairs), size=min(100, len(near_pairs)), replace=False)
+            for c_idx in chosen_near:
+                i, j = near_pairs[c_idx]
+                pairs.append((dataset.library.peaks.spectrum_at(int(i)), dataset.library.peaks.spectrum_at(int(j))))
+
+        remaining = max(0, args.n_pairs - len(pairs))
+        if remaining > 0:
+            seen_pairs = {(near_pairs[c][0], near_pairs[c][1]) for c in chosen_near}
+            while len(pairs) < args.n_pairs:
+                batch_sz = max(100, remaining * 2)
+                r1 = rng.choice(dataset.library.n_spectra, size=batch_sz, replace=True)
+                r2 = rng.choice(dataset.library.n_spectra, size=batch_sz, replace=True)
+                for i, j in zip(r1, r2):
+                    if i != j:
+                        pkey = (min(int(i), int(j)), max(int(i), int(j)))
+                        if pkey not in seen_pairs:
+                            seen_pairs.add(pkey)
+                            pairs.append((dataset.library.peaks.spectrum_at(int(i)), dataset.library.peaks.spectrum_at(int(j))))
+                            if len(pairs) >= args.n_pairs:
+                                break
+
+    queries = sample_query_spectra(dataset.library, n_queries=args.n_queries, seed=seed)
+
+    # 阶段 1: 结果一致性评测 (Result Consistency vs matchms Ground Truth)
     if args.mode in ("all", "consistency"):
         print("\n" + "-" * 70)
-        print("  阶段 1: 结果一致性评测 (Result Consistency)")
+        backend_name = "GPU 流水线" if use_gpu else "CPU 向量化内核"
+        print(f"  阶段 1: 结果一致性评测 (Result Consistency vs matchms) [{backend_name}]")
         print("-" * 70)
 
-        print("[*] 正在评测单对谱打分一致性 (Pairwise Scoring Equivalence)...")
-        pairwise_cons = evaluate_pairwise_consistency(pairs, tolerance_da=args.tolerance)
-        print(format_pairwise_consistency_table(pairwise_cons))
+        if pairs:
+            print("[*] 正在评测单对谱打分一致性 (Pairwise Scoring Equivalence)...")
+            pairwise_cons = evaluate_pairwise_consistency(pairs, tolerance_da=args.tolerance)
+            print(format_pairwise_consistency_table(pairwise_cons))
 
-        print("\n[*] 正在评测 1-to-N 全库开放检索排序一致性与零漏检 (Open Search)...")
+        print(f"\n[*] 正在评测 1-to-N 全库开放检索排序一致性与零漏检 ({backend_name}, n_queries={len(queries)})...")
+
         # 场景 A: 开放检索 Top-10 (排除自身)
         open_queries_top10 = []
         for row, q in queries:
@@ -372,7 +475,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             open_queries_top10.append((row, q, c))
 
         summary_open_top10 = evaluate_retrieval_consistency(
-            dataset, open_queries_top10, mode_name="开放检索 Top-10 (排除自身)"
+            dataset, open_queries_top10, mode_name="开放检索 Top-10 (排除自身)", use_gpu=use_gpu, gpu_forest=gpu_forest
         )
         retrieval_cons_list.append(summary_open_top10)
 
@@ -390,7 +493,7 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             open_queries_top5.append((row, q, c))
 
         summary_open_top5 = evaluate_retrieval_consistency(
-            dataset, open_queries_top5, mode_name="开放检索 Top-5 (排除自身)"
+            dataset, open_queries_top5, mode_name="开放检索 Top-5 (排除自身)", use_gpu=use_gpu, gpu_forest=gpu_forest
         )
         retrieval_cons_list.append(summary_open_top5)
 
@@ -408,23 +511,26 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
             open_queries_thresh.append((row, q, c))
 
         summary_open_thresh = evaluate_retrieval_consistency(
-            dataset, open_queries_thresh, mode_name="开放检索 Threshold >= 0.50 (排除自身)"
+            dataset, open_queries_thresh, mode_name="开放检索 Threshold >= 0.50 (排除自身)", use_gpu=use_gpu, gpu_forest=gpu_forest
         )
         retrieval_cons_list.append(summary_open_thresh)
 
         print(format_retrieval_consistency_table(retrieval_cons_list))
 
-    # 2. 吞吐量与性能评测
+    # 阶段 2: 吞吐量与加速比基准评测
     if args.mode in ("all", "throughput"):
         print("\n" + "-" * 70)
-        print("  阶段 2: 吞吐量与耗时基准评测 (Throughput & Latency)")
+        print("  阶段 2: 吞吐量与耗时基准评测 (Throughput & Latency vs matchms)")
         print("-" * 70)
 
-        print("[*] 正在测量逐对谱打分算子微基准 (Kernel Microbenchmark)...")
-        pairwise_tp = benchmark_pairwise_throughput(pairs, tolerance_da=args.tolerance)
-        print(format_pairwise_throughput_table(pairwise_tp))
+        if pairs:
+            print("[*] 正在测量算子微基准 (Kernel Microbenchmark)...")
+            pairwise_tp = benchmark_pairwise_throughput(pairs, tolerance_da=args.tolerance)
+            print(format_pairwise_throughput_table(pairwise_tp))
 
-        print("\n[*] 正在测量 1-to-N 全库开放检索端到端吞吐量与时延 (Macrobenchmark)...")
+        print(f"\n[*] 正在测量 1-to-N 全库开放检索宏观吞吐量与时延 (Macrobenchmark, n_queries={len(queries)})...")
+        skip_matchms = getattr(args, "skip_matchms", False)
+
         # 场景 A: 开放检索 Top-10 (全库无限制)
         tp_queries_top10 = []
         for row, q in queries:
@@ -436,7 +542,6 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
                 ion_mode=meta.ion_mode,
             )
             tp_queries_top10.append((row, q, c))
-        skip_matchms = getattr(args, "skip_matchms", False)
         tp_open_top10 = benchmark_retrieval_throughput(
             dataset,
             tp_queries_top10,
@@ -488,7 +593,6 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
 
         print(format_retrieval_throughput_table(retrieval_tp_list))
 
-    # 3. 报告输出
     config_meta = {
         "mode": args.mode,
         "library_size": dataset.n_spectra,
@@ -496,11 +600,11 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
         "n_pairs": len(pairs),
         "tolerance": args.tolerance,
         "tolerance_da": args.tolerance,
-        "seed": getattr(args, "seed", 2026),
+        "seed": seed,
         "mgf": str(dataset.parsed.source_path),
-        "clean": bool(getattr(args, "clean", True)),
-        "clean_max_peaks": args.clean_max_peaks if getattr(args, "clean", True) else None,
-        "clean_min_rel": args.clean_min_rel if getattr(args, "clean", True) else None,
+        "clean": clean_enabled,
+        "clean_max_peaks": args.clean_max_peaks if clean_enabled else None,
+        "clean_min_rel": args.clean_min_rel if clean_enabled else None,
     }
 
     if args.output_json:
@@ -588,6 +692,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="跳过 matchms 穷举对比，仅评测 JET-Forest 自身检索吞吐量与时延 (百万级大库推荐)",
     )
     p_bench.add_argument(
+        "--gpu",
+        action="store_true",
+        default=False,
+        help="在基准测试中启用 GPU 模式 (用于一致性或吞吐评测)",
+    )
+    p_bench.add_argument(
         "--mode",
         type=str,
         choices=["all", "consistency", "throughput"],
@@ -596,6 +706,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_bench.add_argument("mgf", nargs="?", type=str, default=None, help="参考库 MGF 文件路径 (可选位置参数，与 --mgf 等价)")
     p_bench.add_argument("--mgf", dest="mgf_opt", type=str, default=None, help="参考库 MGF 文件路径 (可选选项参数，与位置参数等价)")
+    p_bench.add_argument(
+        "--engines",
+        type=str,
+        default=None,
+        help="参评引擎与后端列表 (逗号分隔，如 'jetf-gpu,jetf-cpu-mt,matchms', 'blink,flashentropy')",
+    )
+    p_bench.add_argument(
+        "-b",
+        "--batch-size",
+        type=int,
+        default=128,
+        help="基准测试批处理大小 (默认 128，GPU 异构流水线推荐 64~512)",
+    )
+    p_bench.add_argument(
+        "--cpu-threads",
+        type=int,
+        default=None,
+        help="CPU 多线程并发线程数 (默认自动探测物理/逻辑核心数)",
+    )
     p_bench.add_argument("--library-size", type=int, default=2000, help="测试参考库容量大小 (默认 2000)")
     p_bench.add_argument(
         "-q",

@@ -108,6 +108,7 @@ def search_forest(
     library: PreprocessedLibrary | QueryConfig | None = None,
     config: QueryConfig | None = None,
     uind: bool = True,
+    parallel_root_bounds: bool = True,
 ) -> SearchOutcome:
     """在包络森林索引上执行全库开放式检索 (Open / Threshold Search)。
 
@@ -119,6 +120,7 @@ def search_forest(
     - library: 预处理全库 (PreprocessedLibrary, 可选，若快照已含元数据可省略)
     - config: 开放检索配置 (QueryConfig)
     - uind: 是否开启单谱 Uind 上界过滤 (默认 True)
+    - parallel_root_bounds: 是否在计算根节点包络上界时启用 Numba 内部多线程并行 (默认 True)
     """
     _validate_query(query)
 
@@ -150,6 +152,7 @@ def search_forest(
     results = ResultSet(config)
     scored_rows: set[int] = set()
     n_scored = 0
+    probe_scored = 0
 
     # 0 峰空谱快速短路
     if query.mass.size == 0:
@@ -172,6 +175,7 @@ def search_forest(
             n_scored=0,
             bound_eval_time_ms=0.0,
             exact_eval_time_ms=0.0,
+            probe_scored=0,
         )
         versions = search_versions(library, config, default_version=forest.spec.versioned_id)
         return SearchOutcome(
@@ -252,7 +256,9 @@ def search_forest(
 
         nodes_visited += len(p_trees)
         t_bstart = time.perf_counter()
-        u_roots = batch_root_bounds(query, forest, p_trees, q_cell_lower, q_cell_upper)
+        u_roots = batch_root_bounds(
+            query, forest, p_trees, q_cell_lower, q_cell_upper, parallel=parallel_root_bounds
+        )
         timers.bound_eval_ms += elapsed_ms(t_bstart)
 
         curr_theta = results.theta()
@@ -308,6 +314,7 @@ def search_forest(
                         lid, query, forest, spectra, config, results, timers, scored_rows, frag_tau, uind
                     )
                     n_scored += sc
+                    probe_scored += sc
                     uind_pruned += up
 
     # 3. 全局 Best-First 逐层展开
@@ -382,6 +389,7 @@ def search_forest(
         n_scored=n_scored,
         bound_eval_time_ms=timers.bound_eval_ms,
         exact_eval_time_ms=timers.exact_eval_ms,
+        probe_scored=probe_scored,
     )
 
     versions = search_versions(library, config, default_version=forest.spec.versioned_id)
@@ -461,7 +469,14 @@ def search_forest_batch(
                         pass
 
             def _worker(idx: int) -> SearchOutcome:
-                return search_forest(queries[idx], forest, library, cfg_list[idx], uind=uind)
+                return search_forest(
+                    queries[idx],
+                    forest,
+                    library,
+                    cfg_list[idx],
+                    uind=uind,
+                    parallel_root_bounds=False,
+                )
 
             with ThreadPoolExecutor(
                 max_workers=effective_concurrency,

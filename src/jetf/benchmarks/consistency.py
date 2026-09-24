@@ -119,8 +119,10 @@ def evaluate_retrieval_consistency(
     queries: Sequence[tuple[int, SpectrumPeaks]] | Sequence[tuple[int, SpectrumPeaks, QueryConfig]],
     config: QueryConfig | Sequence[QueryConfig] | None = None,
     mode_name: str = "custom",
+    use_gpu: bool = False,
+    gpu_forest: Any | None = None,
 ) -> RetrievalConsistencySummary:
-    """评测在指定检索配置下，JET-Forest 索引检出结果与 matchms 全量穷举打分的一致性与零漏检。"""
+    """评测在指定检索配置下，JET-Forest (CPU 或 GPU) 索引检出结果与 matchms 全量穷举打分的一致性与零漏检。"""
     check_matchms_available()
     import warnings
     from matchms.similarity import CosineGreedy
@@ -145,6 +147,8 @@ def evaluate_retrieval_consistency(
 
     has_unknown_partition = any(p.ion_mode == IonMode.UNKNOWN for p in dataset.forest.partitions)
 
+    # 预先解析所有查询对象与配置
+    parsed_items: list[tuple[int, SpectrumPeaks, QueryConfig]] = []
     for idx, item in enumerate(queries):
         if len(item) == 3:
             query_row, q_peaks, q_cfg = item  # type: ignore[misc]
@@ -156,7 +160,27 @@ def evaluate_retrieval_consistency(
             q_cfg = config
         else:
             raise ValueError("未为查询提供有效的 QueryConfig")
+        parsed_items.append((query_row, q_peaks, q_cfg))
 
+    # 若启用 GPU 模式，在批处理流水线中一次性检索所有查询谱
+    gpu_outcomes = None
+    if use_gpu:
+        from jetf.gpu import GpuForestIndex, require_cuda, search_forest_batch_gpu
+        require_cuda()
+        if gpu_forest is None:
+            gpu_forest = GpuForestIndex.from_forest(dataset.forest)
+        q_peaks_all = [p[1] for p in parsed_items]
+        q_cfgs_all = [p[2] for p in parsed_items]
+        gpu_outcomes = search_forest_batch_gpu(
+            queries=q_peaks_all,
+            gpu_forest=gpu_forest,
+            library=library,
+            config=q_cfgs_all,
+            batch_size=min(128, len(q_peaks_all)),
+            uind=True,
+        )
+
+    for idx, (query_row, q_peaks, q_cfg) in enumerate(parsed_items):
         if (
             q_cfg.ion_mode == IonMode.UNKNOWN
             and q_cfg.ion_mode_policy == IonModePolicy.INCLUDE_UNKNOWN
@@ -170,8 +194,11 @@ def evaluate_retrieval_consistency(
 
         scorer = _get_scorer(q_cfg.fragment_tolerance_da)
 
-        # 1. JET-Forest 检索执行
-        jetf_outcome = search_forest(q_peaks, dataset.forest, library, q_cfg)
+        # 1. JET-Forest 检索执行 (GPU 或 CPU)
+        if use_gpu and gpu_outcomes is not None:
+            jetf_outcome = gpu_outcomes[idx]
+        else:
+            jetf_outcome = search_forest(q_peaks, dataset.forest, library, q_cfg)
         jetf_hits = jetf_outcome.hits
 
         # 2. matchms 遍历打分基准 (Ground Truth)

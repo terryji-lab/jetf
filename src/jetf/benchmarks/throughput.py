@@ -39,7 +39,16 @@ class PairwiseThroughputResult:
 
 @dataclass(frozen=True)
 class RetrievalThroughputResult:
-    """1-to-N 库检索宏观吞吐量与时延统计。"""
+    """1-to-N 库检索宏观吞吐量与时延统计。
+
+    指标口径与语义说明:
+    - jetf_qps / matchms_qps: 系统级每秒处理查询数 (QPS = n_queries / wall_duration_s)。
+    - jetf_latency_mean_ms: 系统级有效服务均值时延 (摊薄时延, wall_duration_s / n_queries * 1000)。
+      注: 多线程并发 (concurrency > 1) 下，均值为系统级有效服务时延；单任务单次耗时由 P50/P95/P99 体现。
+    - jetf_latency_p50_ms / p95_ms / p99_ms: 任务时延分位数 (包含线程争用与调度开销)。
+    - speedup: 均值加速比 (matchms_mean / jetf_mean)。
+    - throughput_speedup: 系统级吞吐加速比 (jetf_qps / matchms_qps)。
+    """
 
     mode_name: str
     n_queries: int
@@ -210,7 +219,7 @@ def benchmark_retrieval_throughput(
             def _eval_single(item: tuple[int, SpectrumPeaks, QueryConfig]) -> tuple[float, int]:
                 _, q, q_cfg = item
                 t0 = time.perf_counter()
-                outcome = search_forest(q, forest, library, q_cfg)
+                outcome = search_forest(q, forest, library, q_cfg, parallel_root_bounds=False)
                 elapsed = (time.perf_counter() - t0) * 1000.0
                 return elapsed, outcome.stats.n_scored
 
@@ -313,8 +322,12 @@ def benchmark_retrieval_throughput(
             matchms_times_ms.append(elapsed_ms)
 
     jetf_arr = np.array(jetf_times_ms, dtype=np.float64)
-    jetf_mean = float(np.mean(jetf_arr))
-    jetf_std = float(np.std(jetf_arr))
+    # 多线程并发下，均值按系统级有效服务时延 (Wall / N) 摊薄计算；单线程下与单次均值一致
+    if effective_concurrency > 1:
+        jetf_mean = (wall_duration_s / len(parsed_queries)) * 1000.0
+    else:
+        jetf_mean = float(np.mean(jetf_arr)) if jetf_arr.size > 0 else 0.0
+    jetf_std = float(np.std(jetf_arr)) if jetf_arr.size > 0 else 0.0
     # 系统级有效 QPS 统计（考虑多核并发墙上时延）
     jetf_qps = len(parsed_queries) / wall_duration_s if wall_duration_s > 0 else (1000.0 / jetf_mean if jetf_mean > 0 else 0.0)
 
@@ -351,9 +364,9 @@ def benchmark_retrieval_throughput(
         jetf_qps=jetf_qps,
         matchms_qps=mms_qps,
         jetf_latency_mean_ms=jetf_mean,
-        jetf_latency_p50_ms=float(np.percentile(jetf_arr, 50)),
-        jetf_latency_p95_ms=float(np.percentile(jetf_arr, 95)),
-        jetf_latency_p99_ms=float(np.percentile(jetf_arr, 99)),
+        jetf_latency_p50_ms=float(np.percentile(jetf_arr, 50)) if jetf_arr.size > 0 else 0.0,
+        jetf_latency_p95_ms=float(np.percentile(jetf_arr, 95)) if jetf_arr.size > 0 else 0.0,
+        jetf_latency_p99_ms=float(np.percentile(jetf_arr, 99)) if jetf_arr.size > 0 else 0.0,
         matchms_latency_mean_ms=mms_mean,
         matchms_latency_p50_ms=mms_p50,
         matchms_latency_p95_ms=mms_p95,

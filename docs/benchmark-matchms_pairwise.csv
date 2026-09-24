@@ -1,0 +1,2 @@
+n_pairs,tolerance_da,max_absolute_error,mean_absolute_error,rmse,p50_error,p95_error,p99_error,matched_peak_match_rate,discrepant_pairs_count,matchms_pairs_per_sec,matchms_avg_time_us,jetf_pairs_per_sec,jetf_avg_time_us,pairwise_speedup
+1000,0.02,1.03e-04,1.03e-07,3.26e-06,0.00e+00,1.04e-17,2.22e-16,99.90%,1,49506.9,20.2,55245.3,18.1,1.12x

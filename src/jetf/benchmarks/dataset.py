@@ -220,17 +220,24 @@ def sample_query_spectra_from_forest(
     rng = np.random.default_rng(seed)
     n_total = forest.n_spectra
 
-    # 优先抽取已进入索引树 (internal_id >= 0) 且有有效前体质量的谱
+    offsets = forest.postings.spectrum_offsets
+    # 优先抽取已进入索引树 (internal_id >= 0)、有代表性峰数规模 (>= 5 峰) 且有有效前体质量的谱
     valid_rows = []
     for r in range(n_total):
         iid = int(forest.row_to_internal[r])
         if iid >= 0:
             meta = forest.spectra[r]
-            if meta.precursor_mz is not None and np.isfinite(meta.precursor_mz):
+            n_peaks = int(offsets[iid + 1] - offsets[iid])
+            if n_peaks >= 5 and meta.precursor_mz is not None and np.isfinite(meta.precursor_mz):
                 valid_rows.append(r)
 
     if len(valid_rows) < n_queries:
-        valid_rows = [r for r in range(n_total) if int(forest.row_to_internal[r]) >= 0]
+        valid_rows = [
+            r
+            for r in range(n_total)
+            if int(forest.row_to_internal[r]) >= 0
+            and int(offsets[int(forest.row_to_internal[r]) + 1] - offsets[int(forest.row_to_internal[r])]) > 0
+        ]
 
     chosen = rng.choice(valid_rows, size=min(n_queries, len(valid_rows)), replace=False)
     queries: list[tuple[int, SpectrumPeaks]] = []

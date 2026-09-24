@@ -48,11 +48,42 @@ class PrecursorWindow:
     mz: float
     tolerance_da: float
 
+    def __init__(
+        self,
+        mz: float = 0.0,
+        tolerance_da: float = 0.0,
+        *,
+        center: float | None = None,
+        tolerance: float | None = None,
+        min_mz: float | None = None,
+        max_mz: float | None = None,
+    ) -> None:
+        if min_mz is not None and max_mz is not None:
+            if max_mz < min_mz:
+                raise ValueError(f"max_mz ({max_mz}) 不能小于 min_mz ({min_mz})")
+            actual_mz = (min_mz + max_mz) / 2.0
+            actual_tol = (max_mz - min_mz) / 2.0
+        else:
+            actual_mz = center if center is not None else mz
+            actual_tol = tolerance if tolerance is not None else tolerance_da
+
+        object.__setattr__(self, "mz", float(actual_mz))
+        object.__setattr__(self, "tolerance_da", float(actual_tol))
+        self.__post_init__()
+
     def __post_init__(self) -> None:
         if self.mz <= 0.0 or not math.isfinite(self.mz):
             raise ValueError(f"前体 mz 必须为正有限数，得到 {self.mz}")
         if self.tolerance_da <= 0.0 or not math.isfinite(self.tolerance_da):
             raise ValueError(f"前体容差 tolerance_da 必须为正有限数，得到 {self.tolerance_da}")
+
+    @property
+    def center(self) -> float:
+        return self.mz
+
+    @property
+    def tolerance(self) -> float:
+        return self.tolerance_da
 
     @property
     def min_mz(self) -> float:

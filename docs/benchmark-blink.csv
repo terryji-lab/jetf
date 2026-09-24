@@ -1,0 +1,22 @@
+﻿Category,Metric,BLINK,JET-Forest,Notes / Baseline
+Pairwise Accuracy,Sampled Pairs,1000,-,Sample count
+Pairwise Accuracy,MAE,0.001556,0.000000,Mean Absolute Error
+Pairwise Accuracy,RMSE,0.010907,0.000000,Root Mean Squared Error
+Pairwise Accuracy,Pearson r,0.9821,1.0000,Linear Correlation
+Pairwise Accuracy,Spearman rho,0.9887,1.0000,Rank Correlation
+Pairwise Accuracy,Discrepancy Rate (>0.001),9.50%,0.00%,Fraction |diff| > 1e-3
+Pairwise Accuracy,Match Agreement Rate,89.50%,100.00%,Exact match count rate
+Pairwise Accuracy,Bias (Mean Diff),+0.001290,-0.000000,Signed mean difference
+Retrieval Accuracy,Top-K Jaccard (JETF vs BLINK),-,0.6238,Top-10 overlap
+Retrieval Accuracy,Recall@K vs matchms,0.8867,0.9967,Recall@Top-10
+Confusion Matrix,F1 Score,1.0000,1.0000,"Threshold score>=0.7, m>=6"
+Confusion Matrix,Accuracy,100.00%,100.00%,Overall classification accuracy
+Confusion Matrix,Precision,100.00%,100.00%,Precision on similar pairs
+Confusion Matrix,Recall,100.00%,100.00%,Recall on similar pairs
+Throughput Scaling,N=100 Latency (ms),7.18,2.09,Speedup: 3.4x
+Throughput Scaling,N=500 Latency (ms),8.25,7.53,Speedup: 1.1x
+Throughput Scaling,N=1000 Latency (ms),9.54,5.36,Speedup: 1.8x
+Throughput Scaling,N=2000 Latency (ms),11.37,6.84,Speedup: 1.7x
+Extrapolation,Model Beta (Exponent),0.148,Sublinear,log-log slope
+Extrapolation,Fit R^2,0.9268,-,Goodness of fit
+2M Scaling,2.0M Spectra Latency (ms),30.0 (extrap),97.47 (measured),2M Speedup: 0.3x

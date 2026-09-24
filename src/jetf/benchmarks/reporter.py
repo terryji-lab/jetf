@@ -70,8 +70,8 @@ def format_retrieval_throughput_table(
 ) -> str:
     """格式化 1-to-N 库检索吞吐量与加速比表格。"""
     is_small_sample = any(r.n_queries < 50 for r in results)
-    jetf_header = "JETF 时延 (Mean±Std [Med] ms)" if is_small_sample else "JETF 时延 (P50/P99 ms)"
-    mms_header = "matchms 时延 (Mean±Std [Med] ms)" if is_small_sample else "matchms 时延 (P50/P99 ms)"
+    jetf_header = "JETF 时延 (有效均值±Std [Med] ms)" if is_small_sample else "JETF 任务时延 (P50/P99 ms)"
+    mms_header = "matchms 时延 (有效均值±Std [Med] ms)" if is_small_sample else "matchms 任务时延 (P50/P99 ms)"
     headers = [
         "检索场景",
         "库容量 (N)",
@@ -114,7 +114,14 @@ def format_retrieval_throughput_table(
                 f"{r.avg_pruned_ratio * 100:.2f}%",
             ]
         )
-    return tabulate(rows, headers=headers, tablefmt=fmt)
+    table = tabulate(rows, headers=headers, tablefmt=fmt)
+    footnote = (
+        "* 注: CPU MT 的 P50/P95/P99 包含多线程争用下的任务单次执行耗时，而均值为系统级有效服务时延 (Wall / N)；"
+        "GPU 采用批处理执行，任务耗时按批大小均匀分摊。"
+    )
+    if any(r.n_queries < 100 for r in results):
+        footnote += "\n* (注: 样本量 N < 100 时 P95/P99 分位数易受单离群点波动影响)"
+    return f"{table}\n{footnote}"
 
 def get_system_metadata() -> dict[str, Any]:
     """采集当前运行环境元数据（系统、Python与核心依赖版本）。"""
@@ -242,14 +249,21 @@ def save_csv_report(
 
     # 1. 检索宏基准表 (Retrieval Macrobenchmark: 包含吞吐、时延分布与零漏检召回率)
     if retrieval_throughput:
+        def _normalize_mode_key(name: str) -> str:
+            # 1. 移除前缀编号 (如 "1. ", "2. ")
+            parts = name.split(maxsplit=1)
+            if len(parts) > 1 and (parts[0].endswith(".") or parts[0].isdigit()):
+                name = parts[1]
+            # 2. 移除括号场景说明 (如 "(排除自身)", "(全库无限制)")
+            if "(" in name:
+                name = name.split("(", 1)[0].strip()
+            return name.strip()
+
         cons_map: dict[str, RetrievalConsistencySummary] = {}
         if retrieval_consistency:
             for c in retrieval_consistency:
-                # 支持精准匹配或按检索模式模式名关键词匹配
                 cons_map[c.mode_name] = c
-                tokens = c.mode_name.split()
-                if len(tokens) > 1:
-                    cons_map[tokens[1]] = c
+                cons_map[_normalize_mode_key(c.mode_name)] = c
 
         fieldnames = [
             "mode_name",
@@ -276,9 +290,8 @@ def save_csv_report(
 
         rows: list[dict[str, Any]] = []
         for tp in retrieval_throughput:
-            tokens = tp.mode_name.split()
-            key = tokens[1] if len(tokens) > 1 else tp.mode_name
-            c = cons_map.get(tp.mode_name) or cons_map.get(key)
+            norm_key = _normalize_mode_key(tp.mode_name)
+            c = cons_map.get(tp.mode_name) or cons_map.get(norm_key)
 
             row: dict[str, Any] = {
                 "mode_name": tp.mode_name,

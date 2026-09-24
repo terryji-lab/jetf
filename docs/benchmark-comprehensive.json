@@ -1,0 +1,254 @@
+{
+  "mode": "open",
+  "n_queries": 30,
+  "batch_size": 128,
+  "library_size": 2000,
+  "tolerance_da": 0.02,
+  "available_engines": [
+    "jetf-gpu",
+    "jetf-cpu-mt",
+    "blink",
+    "flashentropy",
+    "matchms"
+  ],
+  "metadata": {
+    "matchms_cleaning": true,
+    "cpu_threads": 24,
+    "gpu_memory": {
+      "upload_time_s": 0.004676999989897013,
+      "bandwidth_mb_s": 1856.960702747302,
+      "vram_mb": 8.685005187988281,
+      "energy_savings_mb": 1.8756103515625
+    }
+  },
+  "index_stats": {
+    "jetf-cpu-mt": {
+      "build_time_s": 0.001,
+      "memory_mb": 9.03,
+      "vram_mb": 0.0,
+      "upload_time_s": 0.0,
+      "upload_bandwidth_mb_s": 0.0,
+      "energy_savings_mb": 0.0
+    },
+    "jetf-gpu": {
+      "build_time_s": 0.0047,
+      "memory_mb": 9.03,
+      "vram_mb": 8.69,
+      "upload_time_s": 0.0047,
+      "upload_bandwidth_mb_s": 1857.0,
+      "energy_savings_mb": 1.88
+    },
+    "blink": {
+      "build_time_s": 0.0619,
+      "memory_mb": 0.0,
+      "vram_mb": 0.0,
+      "upload_time_s": 0.0,
+      "upload_bandwidth_mb_s": 0.0,
+      "energy_savings_mb": 0.0
+    },
+    "flashentropy": {
+      "build_time_s": 0.965,
+      "memory_mb": 0.0,
+      "vram_mb": 0.0,
+      "upload_time_s": 0.0,
+      "upload_bandwidth_mb_s": 0.0,
+      "energy_savings_mb": 0.0
+    },
+    "matchms": {
+      "build_time_s": 2.6442,
+      "memory_mb": 0.0,
+      "vram_mb": 0.0,
+      "upload_time_s": 0.0,
+      "upload_bandwidth_mb_s": 0.0,
+      "energy_savings_mb": 0.0
+    },
+    "jetf": {
+      "build_time_s": 0.0047,
+      "memory_mb": 9.03,
+      "vram_mb": 8.69,
+      "upload_time_s": 0.0047,
+      "upload_bandwidth_mb_s": 1857.0,
+      "energy_savings_mb": 1.88
+    }
+  },
+  "latency_stats": {
+    "jetf-gpu": {
+      "wall_time_s": 0.2,
+      "qps": 149.7,
+      "mean_ms": 6.681,
+      "p50_ms": 5.084,
+      "p95_ms": 7.633,
+      "p99_ms": 8.045,
+      "min_ms": 2.739,
+      "max_ms": 8.095,
+      "std_ms": 1.264,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 1.21,
+      "speedup_vs_matchms": 6.4,
+      "avg_roots_pruned": 8.4,
+      "avg_leaves_pruned": 73.0,
+      "avg_uind_pruned": 491.5,
+      "avg_scored_count": 197.2,
+      "avg_pruned_ratio": 0.901383
+    },
+    "jetf-cpu-mt": {
+      "wall_time_s": 0.242,
+      "qps": 124.2,
+      "mean_ms": 8.055,
+      "p50_ms": 99.683,
+      "p95_ms": 201.735,
+      "p99_ms": 211.632,
+      "min_ms": 8.935,
+      "max_ms": 213.907,
+      "std_ms": 63.007,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 1.0,
+      "speedup_vs_matchms": 5.31,
+      "avg_roots_pruned": 12.9,
+      "avg_leaves_pruned": 78.0,
+      "avg_uind_pruned": 314.7,
+      "avg_scored_count": 45.7,
+      "avg_pruned_ratio": 0.977133
+    },
+    "blink": {
+      "wall_time_s": 0.329,
+      "qps": 91.1,
+      "mean_ms": 10.972,
+      "p50_ms": 10.817,
+      "p95_ms": 11.852,
+      "p99_ms": 12.008,
+      "min_ms": 10.143,
+      "max_ms": 12.012,
+      "std_ms": 0.468,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 0.73,
+      "speedup_vs_matchms": 3.9,
+      "avg_roots_pruned": 0.0,
+      "avg_leaves_pruned": 0.0,
+      "avg_uind_pruned": 0.0,
+      "avg_scored_count": 0.0,
+      "avg_pruned_ratio": 0.0
+    },
+    "flashentropy": {
+      "wall_time_s": 0.055,
+      "qps": 547.2,
+      "mean_ms": 1.828,
+      "p50_ms": 1.696,
+      "p95_ms": 3.825,
+      "p99_ms": 3.861,
+      "min_ms": 0.282,
+      "max_ms": 3.864,
+      "std_ms": 1.174,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 4.41,
+      "speedup_vs_matchms": 23.4,
+      "avg_roots_pruned": 0.0,
+      "avg_leaves_pruned": 0.0,
+      "avg_uind_pruned": 0.0,
+      "avg_scored_count": 0.0,
+      "avg_pruned_ratio": 0.0
+    },
+    "matchms": {
+      "wall_time_s": 1.283,
+      "qps": 23.4,
+      "mean_ms": 42.767,
+      "p50_ms": 42.634,
+      "p95_ms": 52.331,
+      "p99_ms": 55.064,
+      "min_ms": 31.944,
+      "max_ms": 55.934,
+      "std_ms": 6.125,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 0.19,
+      "speedup_vs_matchms": 1.0,
+      "avg_roots_pruned": 0.0,
+      "avg_leaves_pruned": 0.0,
+      "avg_uind_pruned": 0.0,
+      "avg_scored_count": 0.0,
+      "avg_pruned_ratio": 0.0
+    },
+    "jetf": {
+      "wall_time_s": 0.2,
+      "qps": 149.7,
+      "mean_ms": 6.681,
+      "p50_ms": 5.084,
+      "p95_ms": 7.633,
+      "p99_ms": 8.045,
+      "min_ms": 2.739,
+      "max_ms": 8.095,
+      "std_ms": 1.264,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 1.21,
+      "speedup_vs_matchms": 6.4,
+      "avg_roots_pruned": 8.4,
+      "avg_leaves_pruned": 73.0,
+      "avg_uind_pruned": 491.5,
+      "avg_scored_count": 197.2,
+      "avg_pruned_ratio": 0.901383
+    }
+  },
+  "speedups_vs_1t": {
+    "jetf-gpu": 1.0,
+    "jetf-cpu-mt": 1.0,
+    "blink": 1.0,
+    "flashentropy": 1.0,
+    "matchms": 1.0,
+    "jetf": 1.0
+  },
+  "speedups_vs_mt": {
+    "jetf-gpu": 1.21,
+    "jetf-cpu-mt": 1.0,
+    "blink": 0.73,
+    "flashentropy": 4.41,
+    "matchms": 0.19,
+    "jetf": 1.21
+  },
+  "speedups_vs_matchms": {
+    "jetf-gpu": 6.4,
+    "jetf-cpu-mt": 5.31,
+    "blink": 3.9,
+    "flashentropy": 23.4,
+    "matchms": 1.0,
+    "jetf": 6.4
+  },
+  "scaling_results": [
+    {
+      "scale": 100,
+      "jetf_latency_mean_ms": 2.4728266667807475,
+      "jetf_qps": 404.3955095736052,
+      "blink_latency_mean_ms": 0.9657466667704284,
+      "blink_qps": 1035.4682386263044,
+      "fe_latency_mean_ms": 1.8025266666275759,
+      "fe_qps": 554.7768133000454
+    },
+    {
+      "scale": 500,
+      "jetf_latency_mean_ms": 5.0148533332200405,
+      "jetf_qps": 199.40762641564618,
+      "blink_latency_mean_ms": 0.9896699998838205,
+      "blink_qps": 1010.437822827197,
+      "fe_latency_mean_ms": 1.8409299998893403,
+      "fe_qps": 543.2037068547478
+    },
+    {
+      "scale": 1000,
+      "jetf_latency_mean_ms": 6.253476666461211,
+      "jetf_qps": 159.91104682027884,
+      "blink_latency_mean_ms": 0.976279999789161,
+      "blink_qps": 1024.2963086573131,
+      "fe_latency_mean_ms": 1.8473666665765147,
+      "fe_qps": 541.3110554025371
+    },
+    {
+      "scale": 2000,
+      "jetf_latency_mean_ms": 7.5236599999091895,
+      "jetf_qps": 132.91403386278353,
+      "blink_latency_mean_ms": 0.9426333335189458,
+      "blink_qps": 1060.857880197063,
+      "fe_latency_mean_ms": 1.7942033334596392,
+      "fe_qps": 557.3504303281884
+    }
+  ],
+  "accuracy_results": {},
+  "correctness_results": {}
+}

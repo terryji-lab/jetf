@@ -37,3 +37,8 @@ htmlcov/
 .zcodeignore
 .DS_Store
 Thumbs.db
+
+# Third-party benchmark engines & papers
+blink/
+FlashEntropySearch/
+*.pdf

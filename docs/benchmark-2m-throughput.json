@@ -1,0 +1,172 @@
+{
+  "mode": "open",
+  "n_queries": 64,
+  "batch_size": 128,
+  "library_size": 2003310,
+  "tolerance_da": 0.02,
+  "available_engines": [
+    "jetf-gpu",
+    "jetf-cpu-mt",
+    "jetf-cpu-1t"
+  ],
+  "metadata": {
+    "matchms_cleaning": true,
+    "cpu_threads": 1,
+    "gpu_memory": {
+      "upload_time_s": 2.511137699999381,
+      "bandwidth_mb_s": 1031.8449777034532,
+      "vram_mb": 2591.104824066162,
+      "energy_savings_mb": 741.045768737793
+    }
+  },
+  "index_stats": {
+    "jetf-cpu-1t": {
+      "build_time_s": 16.6717,
+      "memory_mb": 2414.19,
+      "vram_mb": 0.0,
+      "upload_time_s": 0.0,
+      "upload_bandwidth_mb_s": 0.0,
+      "energy_savings_mb": 0.0
+    },
+    "jetf-cpu-mt": {
+      "build_time_s": 16.6717,
+      "memory_mb": 2414.19,
+      "vram_mb": 0.0,
+      "upload_time_s": 0.0,
+      "upload_bandwidth_mb_s": 0.0,
+      "energy_savings_mb": 0.0
+    },
+    "jetf-gpu": {
+      "build_time_s": 2.5111,
+      "memory_mb": 2414.19,
+      "vram_mb": 2591.1,
+      "upload_time_s": 2.5111,
+      "upload_bandwidth_mb_s": 1031.8,
+      "energy_savings_mb": 741.05
+    },
+    "jetf": {
+      "build_time_s": 2.5111,
+      "memory_mb": 2414.19,
+      "vram_mb": 2591.1,
+      "upload_time_s": 2.5111,
+      "upload_bandwidth_mb_s": 1031.8,
+      "energy_savings_mb": 741.05
+    }
+  },
+  "latency_stats": {
+    "jetf-gpu": {
+      "wall_time_s": 3.294,
+      "qps": 19.4,
+      "mean_ms": 51.469,
+      "p50_ms": 14.735,
+      "p95_ms": 15.934,
+      "p99_ms": 17.225,
+      "min_ms": 12.39,
+      "max_ms": 18.11,
+      "std_ms": 0.954,
+      "speedup_vs_1t": 2.31,
+      "speedup_vs_mt": 2.21,
+      "speedup_vs_matchms": 1.0,
+      "avg_roots_pruned": 29842.3,
+      "avg_leaves_pruned": 7059.4,
+      "avg_uind_pruned": 14775.6,
+      "avg_scored_count": 485.2,
+      "avg_pruned_ratio": 0.999758
+    },
+    "jetf-cpu-mt": {
+      "wall_time_s": 7.264,
+      "qps": 8.8,
+      "mean_ms": 113.502,
+      "p50_ms": 19.221,
+      "p95_ms": 252.167,
+      "p99_ms": 294.628,
+      "min_ms": 5.199,
+      "max_ms": 309.717,
+      "std_ms": 70.685,
+      "speedup_vs_1t": 1.05,
+      "speedup_vs_mt": 1.0,
+      "speedup_vs_matchms": 1.0,
+      "avg_roots_pruned": 30570.2,
+      "avg_leaves_pruned": 3765.5,
+      "avg_uind_pruned": 4781.7,
+      "avg_scored_count": 331.3,
+      "avg_pruned_ratio": 0.999835
+    },
+    "jetf-cpu-1t": {
+      "wall_time_s": 7.617,
+      "qps": 8.4,
+      "mean_ms": 119.01,
+      "p50_ms": 50.347,
+      "p95_ms": 264.278,
+      "p99_ms": 323.0,
+      "min_ms": 9.907,
+      "max_ms": 334.433,
+      "std_ms": 73.514,
+      "speedup_vs_1t": 1.0,
+      "speedup_vs_mt": 0.95,
+      "speedup_vs_matchms": 1.0,
+      "avg_roots_pruned": 30570.2,
+      "avg_leaves_pruned": 3765.5,
+      "avg_uind_pruned": 4781.7,
+      "avg_scored_count": 331.3,
+      "avg_pruned_ratio": 0.999835
+    },
+    "jetf": {
+      "wall_time_s": 3.294,
+      "qps": 19.4,
+      "mean_ms": 51.469,
+      "p50_ms": 14.735,
+      "p95_ms": 15.934,
+      "p99_ms": 17.225,
+      "min_ms": 12.39,
+      "max_ms": 18.11,
+      "std_ms": 0.954,
+      "speedup_vs_1t": 2.31,
+      "speedup_vs_mt": 2.21,
+      "speedup_vs_matchms": 1.0,
+      "avg_roots_pruned": 29842.3,
+      "avg_leaves_pruned": 7059.4,
+      "avg_uind_pruned": 14775.6,
+      "avg_scored_count": 485.2,
+      "avg_pruned_ratio": 0.999758
+    }
+  },
+  "speedups_vs_1t": {
+    "jetf-gpu": 2.31,
+    "jetf-cpu-mt": 1.05,
+    "jetf-cpu-1t": 1.0,
+    "jetf": 2.31
+  },
+  "speedups_vs_mt": {
+    "jetf-gpu": 2.21,
+    "jetf-cpu-mt": 1.0,
+    "jetf-cpu-1t": 0.95,
+    "jetf": 2.21
+  },
+  "speedups_vs_matchms": {
+    "jetf-gpu": 1.0,
+    "jetf-cpu-mt": 1.0,
+    "jetf-cpu-1t": 1.0,
+    "jetf": 1.0
+  },
+  "scaling_results": [],
+  "accuracy_results": {},
+  "correctness_results": {
+    "gpu_vs_cpu_1t": {
+      "all_zero_false_dismissals": true,
+      "total_false_dismissals": 0,
+      "mean_recall_at_k": 1.0,
+      "max_score_absolute_error": 2.473658150536906e-07,
+      "mean_score_absolute_error": 2.0017274639586023e-08,
+      "hit_count_match_rate": 1.0
+    },
+    "cpu_mt_vs_cpu_1t": {
+      "all_zero_false_dismissals": true,
+      "total_false_dismissals": 0,
+      "mean_recall_at_k": 1.0,
+      "max_score_absolute_error": 0.0,
+      "mean_score_absolute_error": 0.0,
+      "hit_count_match_rate": 1.0
+    }
+  }
+}

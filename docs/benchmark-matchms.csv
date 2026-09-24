@@ -1,0 +1,4 @@
+mode_name,library_size,n_queries,recall_at_k,zero_false_dismissals,total_false_dismissals,max_score_discrepancy,jetf_qps,matchms_qps,speedup,throughput_speedup,jetf_latency_p50_ms,jetf_latency_mean_ms,jetf_latency_std_ms,jetf_latency_p95_ms,jetf_latency_p99_ms,matchms_latency_p50_ms,matchms_latency_mean_ms,matchms_latency_std_ms,avg_pruned_ratio
+开放检索 Top-10 (全库无限制),2000,30,,,,,171.02,27.66,6.19x,6.18x,4.75,5.85,3.05,10.78,15.1,37.22,36.16,9.61,97.72%
+开放检索 Top-5 (全库无限制),2000,30,,,,,255.55,27.18,9.40x,9.40x,2.99,3.91,2.95,9.27,13.98,38.0,36.79,10.44,98.70%
+开放检索 Threshold >= 0.50,2000,30,,,,,678.58,26.63,25.50x,25.48x,0.68,1.47,1.84,6.12,7.31,39.38,37.56,10.5,99.80%
